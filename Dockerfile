@@ -24,11 +24,11 @@ WORKDIR /app
 
 # 安装依赖到指定的/install文件夹
 # 选用国内镜像源以提高下载速度
-RUN pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple
-RUN pip config set global.trusted-host mirrors.cloud.tencent.com
-RUN pip install --upgrade pip
+RUN python3 -m  pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple
+RUN python3 -m  pip config set global.trusted-host mirrors.cloud.tencent.com
+RUN python3 -m  pip install --upgrade pip
 # pip install scipy 等数学包失败，可使用 apk add py3-scipy 进行， 参考安装 https://pkgs.alpinelinux.org/packages?name=py3-scipy&branch=v3.13
-RUN pip install --user -r requirements.txt
+RUN python3 -m  pip install --user -r requirements.txt
 
 # 暴露端口。
 # 此处端口必须与「服务设置」-「流水线」以及「手动上传代码包」部署时填写的端口一致，否则会部署失败。
