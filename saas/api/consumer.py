@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from ..infra.repository import (
     get_menu_by_store,
     create_order,
@@ -19,34 +19,59 @@ from ..infra.models import MemberAddress, db, Merchant
 from ..infra.context import set_temporary_tenant
 from ..services.wechat_service import jsapi_unified_order, build_jsapi_params, decrypt_notify
 from ..infra.models import RechargeOrder
+import os, json, time, hmac, hashlib, base64
+from urllib import request as urlreq, parse as urlparse
 
 consumer_bp = Blueprint("consumer_bp", __name__)
 
 @consumer_bp.route('/auth/login', methods=['POST'])
 def auth_login():
-    """
-    WeChat Mini Program Login
-    Payload: { "code": "..." }
-    """
-    payload = request.get_json()
+    payload = request.get_json(force=True) or {}
     code = payload.get("code")
     if not code:
         return jsonify({"error": "code required"}), 400
-    
-    # Mock Wechat Login
-    # In real world: call https://api.weixin.qq.com/sns/jscode2session
-    # Here we just generate a mock OpenID based on code (or random)
-    
-    # Simulate OpenID
-    import hashlib
-    openid = "mock_openid_" + hashlib.md5(code.encode()).hexdigest()[:8]
-    
-    # Use openid as user_id for simplicity in this mock
-    user_id = openid
-    
+
+    appid = os.getenv("WECHAT_APPID") or request.headers.get("X-WX-AppID")
+    secret = os.getenv("WECHAT_APPSECRET") or request.headers.get("X-WX-AppSecret")
+
+    if not appid or not secret:
+        return jsonify({"error": "missing_wechat_config"}), 400
+        
+    url = (
+        "https://api.weixin.qq.com/sns/jscode2session?" +
+        urlparse.urlencode({
+            "appid": appid,
+            "secret": secret,
+            "js_code": code,
+            "grant_type": "authorization_code"
+        })
+    )
+    try:
+        resp = urlreq.urlopen(url, timeout=5)
+        data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return jsonify({"error": "wechat_api_error", "detail": str(e)}), 500
+    if data.get("errcode"):
+        return jsonify({
+            "error": "wechat_api_error",
+            "code": data.get("errcode"),
+            "detail": data.get("errmsg")
+        }), 400
+    openid = data.get("openid")
+    if not openid:
+        return jsonify({"error": "openid_missing"}), 400
+    iat = int(time.time())
+    exp = iat + 7 * 24 * 3600
+    header_json = {"alg": "HS256", "typ": "JWT"}
+    payload_json = {"sub": openid, "iat": iat, "exp": exp}
+    signing_input = base64.urlsafe_b64encode(json.dumps(header_json, separators=(",", ":")).encode()).rstrip(b"=").decode() + "." + \
+                    base64.urlsafe_b64encode(json.dumps(payload_json, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    secret_key = current_app.config.get("SECRET_KEY", "dev")
+    signature = hmac.new(secret_key.encode(), signing_input.encode(), hashlib.sha256).digest()
+    token = signing_input + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
     return jsonify({
-        "token": "mock_token_" + user_id,
-        "user_id": user_id,
+        "token": token,
+        "user_id": openid,
         "openid": openid
     })
 
