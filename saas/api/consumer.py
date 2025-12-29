@@ -1,0 +1,567 @@
+from flask import Blueprint, request, jsonify
+from ..infra.repository import (
+    get_menu_by_store,
+    create_order,
+    list_orders,
+    pay_order,
+    bind_phone,
+    recharge_wallet,
+    get_wallet,
+    get_store,
+    Store,
+    get_merchant_by_slug,
+    list_stores_by_merchant,
+    create_recharge_order,
+    list_recharge_orders,
+    confirm_recharge_order
+)
+from ..infra.models import MemberAddress, db, Merchant
+from ..infra.context import set_temporary_tenant
+from ..services.wechat_service import jsapi_unified_order, build_jsapi_params, decrypt_notify
+from ..infra.models import RechargeOrder
+
+consumer_bp = Blueprint("consumer_bp", __name__)
+
+@consumer_bp.route('/auth/login', methods=['POST'])
+def auth_login():
+    """
+    WeChat Mini Program Login
+    Payload: { "code": "..." }
+    """
+    payload = request.get_json()
+    code = payload.get("code")
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    
+    # Mock Wechat Login
+    # In real world: call https://api.weixin.qq.com/sns/jscode2session
+    # Here we just generate a mock OpenID based on code (or random)
+    
+    # Simulate OpenID
+    import hashlib
+    openid = "mock_openid_" + hashlib.md5(code.encode()).hexdigest()[:8]
+    
+    # Use openid as user_id for simplicity in this mock
+    user_id = openid
+    
+    return jsonify({
+        "token": "mock_token_" + user_id,
+        "user_id": user_id,
+        "openid": openid
+    })
+
+@consumer_bp.route('/auth/phone', methods=['POST'])
+def auth_phone():
+    """
+    Get WeChat Phone Number
+    Payload: { "code": "...", "encryptedData": "...", "iv": "..." }
+    """
+    # In real world: decrypt data using session_key
+    # Here: just return a mock phone number
+    return jsonify({
+        "phone": "13800138000",
+        "countryCode": "86"
+    })
+
+@consumer_bp.route('/merchants/<merchant_slug>/stores', methods=['GET'])
+def list_merchant_stores_public(merchant_slug):
+    """
+    获取商户下的所有门店（公开）
+    """
+    # 1. Resolve merchant slug to UUID
+    m_info = get_merchant_by_slug(merchant_slug)
+    if not m_info:
+        # Fallback: check if slug is actually a UUID
+        from ..infra.models import Merchant
+        m = Merchant.query.get(merchant_slug)
+        if m:
+            m_info = {
+                "id": m.id, 
+                "name": m.name,
+                "banner_url": m.banner_url,
+                "theme_style": m.theme_style
+            }
+        else:
+            return jsonify({"error": "merchant_not_found"}), 404
+            
+    merchant_id = m_info["id"]
+    
+    # 2. List stores
+    stores = list_stores_by_merchant(merchant_id)
+
+    print(stores)
+    
+    # Return wrapper with merchant info
+    return jsonify({
+        "merchant": m_info,
+        "stores": stores
+    })
+
+@consumer_bp.get('/merchants/<merchant_slug>/decoration')
+def get_merchant_decoration(merchant_slug):
+    m_info = get_merchant_by_slug(merchant_slug)
+    if not m_info:
+        m = Merchant.query.get(merchant_slug)
+        if not m:
+            return jsonify({"error": "merchant_not_found"}), 404
+        return jsonify({
+            "id": m.id,
+            "slug": m.slug,
+            "name": m.name,
+            "banner_url": m.banner_url or "",
+            "theme_style": m.theme_style or "light"
+        })
+    return jsonify({
+        "id": m_info["id"],
+        "slug": m_info.get("slug"),
+        "name": m_info.get("name"),
+        "banner_url": m_info.get("banner_url") or "",
+        "theme_style": m_info.get("theme_style") or "light"
+    })
+@consumer_bp.route('/member/assets', methods=['GET'])
+def get_member_assets():
+    """
+    获取会员资产（余额、积分、优惠券数量）
+    Query: merchant_id (UUID 或 slug)
+    Header: X-User-ID
+    """
+    merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.args.get("merchant")
+    if not merchant_input:
+        merchant_input = request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    
+    user_id = request.headers.get("X-User-ID", "guest")
+    
+    # 解析 merchant_input 可能是 UUID 或 slug
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    
+    with set_temporary_tenant(tenant_id):
+        # Wallet
+        w = get_wallet(user_id)
+        # Member Info (Points)
+        from ..infra.models import Member, Coupon
+        mem = Member.query.filter_by(user_id=user_id, tenant_id=tenant_id).first()
+        points = mem.points if mem else 0
+        
+        # Coupons
+        # TODO: Implement user coupons table. For now, return 0 or list available templates
+        coupon_count = 0
+        
+        return jsonify({
+            "balance_cents": w.get("balance_cents", 0),
+            "points": points,
+            "coupon_count": coupon_count
+        })
+
+@consumer_bp.route('/stores/<store_id>', methods=['GET'])
+def get_store_info_public(store_id):
+    """
+    获取门店公开信息
+    """
+    store = get_store(store_id)
+    if not store:
+        return jsonify({"error": "not_found"}), 404
+    
+    s_obj = Store.query.get(store_id)
+    m_banner = ""
+    m_theme = "light"
+    if s_obj:
+        m = Merchant.query.get(s_obj.tenant_id)
+        if m:
+            m_banner = m.banner_url or ""
+            m_theme = m.theme_style or "light"
+    
+    return jsonify({
+        "id": store["id"],
+        "name": store["name"],
+        "merchant_id": store["merchant_id"], # tenant_id
+        "status": store["status"],
+        "banner_url": m_banner,
+        "theme_style": m_theme
+    })
+
+@consumer_bp.route('/stores/<store_id>/menu', methods=['GET'])
+def get_store_menu(store_id):
+    """
+    获取门店菜单
+    """
+    # 必须切换到租户上下文，否则 filter_by(tenant_id) 会过滤失败或报错
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        menu = get_menu_by_store(store_id)
+        return jsonify(menu)
+
+
+@consumer_bp.route('/orders', methods=['POST'])
+def create_order_endpoint():
+    """
+    创建订单
+    """
+    payload = request.get_json()
+    # 自动补充 user_id (Mock)
+    if "user_id" not in payload:
+        payload["user_id"] = request.headers.get("X-User-ID", "guest")
+        
+    # 如果没传 items，直接报错（防止创建空订单）
+    if not payload.get("items"):
+         return jsonify({"error": "empty_items"}), 400
+
+    # 租户上下文切换!
+    store_id = payload.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+        
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        try:
+            # Re-inject store_id into payload just in case, though it should be there
+            # Also ensure scene, table_code, etc. are correct if logic needs them
+            order = create_order(payload)
+            return jsonify(order)
+        except Exception as e:
+            # Log error stack trace for debugging 500s or hidden errors
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 400
+
+
+@consumer_bp.route('/orders/<order_id>/pay', methods=['POST'])
+def pay_order_endpoint(order_id):
+    """
+    支付订单
+    """
+    payload = request.get_json() or {}
+    channel = payload.get("channel", "WX_JSAPI")
+    res = pay_order(order_id, channel)
+    if "error" in res:
+        return jsonify(res), 400
+    return jsonify(res)
+
+
+@consumer_bp.route('/wallet', methods=['GET'])
+def get_my_wallet():
+    """
+    查询会员钱包余额
+    Query: merchant_id (UUID 或 slug，用于定位租户)
+    Header: X-User-ID
+    """
+    merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.args.get("merchant")
+    if not merchant_input:
+        merchant_input = request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    
+    user_id = request.headers.get("X-User-ID", "guest")
+    
+    # 解析为租户UUID
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    
+    with set_temporary_tenant(tenant_id):
+        return jsonify(get_wallet(user_id))
+
+
+@consumer_bp.route('/wallet/recharge', methods=['POST'])
+def recharge_my_wallet():
+    """
+    会员储值充值
+    POST Body:
+    { "merchant_id": "<slug or uuid>", "amount_cents": 10000 }
+    Header: X-User-ID
+    """
+    payload = request.get_json()
+    merchant_input = payload.get("merchant_id") or payload.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+        
+    user_id = request.headers.get("X-User-ID", "guest")
+    amount = int(payload.get("amount_cents", 0))
+    
+    if amount <= 0:
+        return jsonify({"error": "invalid_amount"}), 400
+        
+    # 充值活动规则: 充100送10 (10000分送1000分)
+    bonus = 0
+    if amount >= 10000:
+        bonus = 1000
+        
+    total_add = amount + bonus
+    
+    # 获取租户上下文（按商户）
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+        
+    with set_temporary_tenant(tenant_id):
+        # 注意：这里直接修改余额，实际项目应创建充值订单->支付->回调
+        # MVP直接模拟充值成功
+        res = recharge_wallet(user_id, total_add)
+        res["bonus_cents"] = bonus
+        return jsonify(res)
+
+@consumer_bp.post("/wallet/recharge/prepay")
+def wallet_recharge_prepay():
+    payload = request.get_json(force=True) or {}
+    merchant_input = payload.get("merchant_id") or payload.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    user_id = request.headers.get("X-User-ID", "guest")
+    amount = int(payload.get("amount_cents", 0))
+    if amount <= 0:
+        return jsonify({"error": "invalid_amount"}), 400
+    bonus = 0
+    if amount >= 10000:
+        bonus = 1000
+    openid = payload.get("openid") or user_id
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    with set_temporary_tenant(tenant_id):
+        order = create_recharge_order(user_id, amount, bonus, "WX_JSAPI")
+        appid = request.headers.get("X-WX-AppID") or (Merchant.query.get(tenant_id).slug if Merchant.query.get(tenant_id) else "")
+        mchid = request.headers.get("X-WX-MchID") or ""
+        notify_url = (request.url_root.rstrip("/") + "/api/wallet/recharge/notify")
+        prepay = jsapi_unified_order(appid, mchid, openid, "Wallet Recharge", order["id"], amount, notify_url)
+        params = build_jsapi_params(appid, prepay.get("prepay_id", ""))
+        return jsonify({
+            "order_id": order["id"],
+            "timeStamp": params["timeStamp"],
+            "nonceStr": params["nonceStr"],
+            "package": params["package"],
+            "signType": params["signType"],
+            "paySign": params["paySign"]
+        })
+
+@consumer_bp.post("/wallet/recharge/confirm")
+def wallet_recharge_confirm():
+    payload = request.get_json(force=True) or {}
+    order_id = payload.get("order_id")
+    if not order_id:
+        return jsonify({"error": "order_id required"}), 400
+    user_id = request.headers.get("X-User-ID", "guest")
+    ro = confirm_recharge_order(order_id)
+    if "error" in ro:
+        return jsonify(ro), 404
+    return jsonify(ro)
+
+@consumer_bp.get("/wallet/recharge/orders")
+def wallet_recharge_orders():
+    merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    user_id = request.headers.get("X-User-ID", "guest")
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    with set_temporary_tenant(tenant_id):
+        data = list_recharge_orders(user_id)
+        return jsonify(data)
+
+@consumer_bp.post("/wallet/recharge/notify")
+def wallet_recharge_notify():
+    payload = request.get_json(force=True) or {}
+    resource = payload.get("resource") or {}
+    apiv3_key = ""
+    data = decrypt_notify(resource, apiv3_key)
+    out_trade_no = data.get("out_trade_no")
+    if not out_trade_no:
+        return jsonify({"code": "FAIL"}), 400
+    ro = RechargeOrder.query.get(out_trade_no)
+    if not ro:
+        return jsonify({"code": "FAIL"}), 404
+    with set_temporary_tenant(ro.tenant_id):
+        res = confirm_recharge_order(out_trade_no)
+        return jsonify({"code": "SUCCESS"})
+
+
+@consumer_bp.get("/orders")
+def get_orders():
+    """
+    查询我的订单
+    Query: store_id
+    Header: X-User-ID
+    """
+    store_id = request.args.get("store_id")
+    status = request.args.get("status")
+    
+    # 同样需要租户上下文来过滤
+    if store_id:
+        store = Store.query.get(store_id)
+        if store:
+             with set_temporary_tenant(store.tenant_id):
+                 # 这里 list_orders 内部其实没按 user_id 过滤，MVP 假设 list_orders 应该过滤 user_id
+                 # 但 repository.list_orders 目前是查所有。我们需要修改 list_orders 支持 user_id 过滤
+                 # 暂时先全部返回，或者在 consumer.py 过滤
+                 data = list_orders(status)
+                 # 过滤当前用户
+                 user_id = request.headers.get("X-User-ID", "guest")
+                 my_orders = [o for o in data if o["user_id"] == user_id]
+                 return jsonify(my_orders)
+                 
+    return jsonify([])
+
+
+@consumer_bp.post("/members/bind_phone")
+def post_bind_phone():
+    payload = request.get_json(force=True) or {}
+    merchant_input = payload.get("merchant_id") or payload.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+        
+    # 用户唯一标识改为手机号
+    phone = str(payload.get("phone", "")).strip()
+    if not phone:
+        return jsonify({"error": "phone required"}), 400
+    payload["user_id"] = phone
+    
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+        
+    with set_temporary_tenant(tenant_id):
+        result = bind_phone(payload)
+        return jsonify(result)
+
+# --- Address APIs ---
+
+@consumer_bp.route('/member/addresses', methods=['GET'])
+def list_addresses():
+    store_id = request.args.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+        
+    user_id = request.headers.get("X-User-ID", "guest")
+    
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        addrs = MemberAddress.query.filter_by(user_id=user_id, tenant_id=store.tenant_id).order_by(MemberAddress.created_at.desc()).all()
+        return jsonify([a.to_dict() for a in addrs])
+
+@consumer_bp.route('/member/addresses', methods=['POST'])
+def create_address():
+    payload = request.get_json()
+    store_id = payload.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    
+    user_id = request.headers.get("X-User-ID", "guest")
+    
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        count = MemberAddress.query.filter_by(user_id=user_id, tenant_id=store.tenant_id).count()
+        if count >= 20:
+             return jsonify({"error": "address_limit_reached"}), 400
+             
+        import uuid
+        import time
+        addr = MemberAddress(
+            id=uuid.uuid4().hex,
+            tenant_id=store.tenant_id,
+            user_id=user_id,
+            name=payload.get("name"),
+            phone=payload.get("phone"),
+            address=payload.get("address"),
+            detail=payload.get("detail", ""),
+            is_default=payload.get("is_default", False),
+            created_at=int(time.time())
+        )
+        
+        if addr.is_default:
+            MemberAddress.query.filter_by(user_id=user_id, tenant_id=store.tenant_id).update({"is_default": False})
+            
+        db.session.add(addr)
+        db.session.commit()
+        return jsonify(addr.to_dict())
+
+@consumer_bp.route('/member/addresses/<addr_id>', methods=['PUT'])
+def update_address(addr_id):
+    payload = request.get_json()
+    store_id = payload.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+        
+    user_id = request.headers.get("X-User-ID", "guest")
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        addr = MemberAddress.query.filter_by(id=addr_id, user_id=user_id, tenant_id=store.tenant_id).first()
+        if not addr:
+            return jsonify({"error": "address_not_found"}), 404
+            
+        if "name" in payload: addr.name = payload["name"]
+        if "phone" in payload: addr.phone = payload["phone"]
+        if "address" in payload: addr.address = payload["address"]
+        if "detail" in payload: addr.detail = payload["detail"]
+        if "is_default" in payload:
+            addr.is_default = payload["is_default"]
+            if addr.is_default:
+                 MemberAddress.query.filter(MemberAddress.id != addr_id, MemberAddress.user_id == user_id, MemberAddress.tenant_id == store.tenant_id).update({"is_default": False})
+        
+        db.session.commit()
+        return jsonify(addr.to_dict())
+
+@consumer_bp.route('/member/addresses/<addr_id>', methods=['DELETE'])
+def delete_address(addr_id):
+    store_id = request.args.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+        
+    user_id = request.headers.get("X-User-ID", "guest")
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        addr = MemberAddress.query.filter_by(id=addr_id, user_id=user_id, tenant_id=store.tenant_id).first()
+        if addr:
+            db.session.delete(addr)
+            db.session.commit()
+        return jsonify({"ok": True})
