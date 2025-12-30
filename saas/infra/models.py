@@ -154,6 +154,7 @@ class Member(db.Model, TenantMixin):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(64), nullable=False, index=True)
     phone = Column(String(20), default="")
+    nickname = Column(String(64), default="")
     points = Column(Integer, default=0)
 
 class Wallet(db.Model, TenantMixin):

@@ -5,6 +5,7 @@ from ..infra.repository import (
     list_orders,
     pay_order,
     bind_phone,
+    update_member_profile,
     recharge_wallet,
     get_wallet,
     get_store,
@@ -175,6 +176,7 @@ def get_member_assets():
         from ..infra.models import Member, Coupon
         mem = Member.query.filter_by(user_id=user_id, tenant_id=tenant_id).first()
         points = mem.points if mem else 0
+        nickname = getattr(mem, "nickname", "") if mem else ""
         
         # Coupons
         # TODO: Implement user coupons table. For now, return 0 or list available templates
@@ -183,7 +185,8 @@ def get_member_assets():
         return jsonify({
             "balance_cents": w.get("balance_cents", 0),
             "points": points,
-            "coupon_count": coupon_count
+            "coupon_count": coupon_count,
+            "nickname": nickname
         })
 
 @consumer_bp.route('/stores/<store_id>', methods=['GET'])
@@ -485,6 +488,25 @@ def post_bind_phone():
         
     with set_temporary_tenant(tenant_id):
         result = bind_phone(payload)
+        return jsonify(result)
+
+@consumer_bp.post("/members/profile")
+def post_member_profile():
+    payload = request.get_json(force=True) or {}
+    merchant_input = payload.get("merchant_id") or payload.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    payload["user_id"] = request.headers.get("X-User-ID", "guest")
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    with set_temporary_tenant(tenant_id):
+        result = update_member_profile(payload)
         return jsonify(result)
 
 # --- Address APIs ---

@@ -744,15 +744,49 @@ def bind_phone(payload: Dict[str, Any]) -> Dict[str, Any]:
          
     user_id = str(payload.get("user_id", "u"))
     phone = str(payload.get("phone", ""))
+    nickname = str(payload.get("nickname", "")).strip()
+    _ensure_member_nickname_column()
     
     m = Member.query.filter_by(user_id=user_id, tenant_id=tid).first()
     if not m:
-        m = Member(user_id=user_id, tenant_id=tid, phone=phone, points=0)
+        if not nickname:
+            nickname = "用户" + uuid.uuid4().hex[:6]
+        m = Member(user_id=user_id, tenant_id=tid, phone=phone, points=0, nickname=nickname)
         db.session.add(m)
     else:
         m.phone = phone
+        if nickname:
+            m.nickname = nickname
     db.session.commit()
-    return {"ok": True}
+    return {"ok": True, "nickname": m.nickname or ""}
+
+def _ensure_member_nickname_column():
+    try:
+        sql = text("SELECT COUNT(1) AS cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members' AND COLUMN_NAME = 'nickname'")
+        row = db.session.execute(sql).first()
+        cnt = int(row[0]) if row and row[0] is not None else 0
+        if cnt == 0:
+            db.session.execute(text("ALTER TABLE members ADD COLUMN nickname VARCHAR(64) DEFAULT ''"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+def update_member_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
+    tid = get_current_tenant_id()
+    if not tid:
+        raise Exception("Missing tenant context for member profile")
+    _ensure_member_nickname_column()
+    user_id = str(payload.get("user_id", "u"))
+    nickname = str(payload.get("nickname", "")).strip()
+    m = Member.query.filter_by(user_id=user_id, tenant_id=tid).first()
+    if not m:
+        m = Member(user_id=user_id, tenant_id=tid, phone="", points=0, nickname=nickname)
+        db.session.add(m)
+    else:
+        if nickname:
+            m.nickname = nickname
+    db.session.commit()
+    return {"ok": True, "nickname": m.nickname or ""}
 
 def get_wallet(user_id: str) -> Dict[str, int]:
     tid = get_current_tenant_id()
