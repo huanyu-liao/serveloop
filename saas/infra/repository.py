@@ -71,7 +71,14 @@ def list_merchants() -> List[Dict[str, Any]]:
     # Admin 接口，通常不需要租户隔离，或者只能看自己的
     # 这里假设是超级管理员
     ms = Merchant.query.all()
-    return [{"id": m.id, "slug": m.slug, "name": m.name, "plan": m.plan} for m in ms]
+    return [{
+        "id": m.id,
+        "slug": m.slug,
+        "name": m.name,
+        "plan": m.plan,
+        "banner_url": getattr(m, "banner_url", "") or "",
+        "theme_style": getattr(m, "theme_style", "light") or "light"
+    } for m in ms]
 
 def create_merchant(payload: Dict[str, Any]) -> Dict[str, Any]:
     slug = payload.get("slug")

@@ -25,6 +25,40 @@ from urllib import request as urlreq, parse as urlparse
 
 consumer_bp = Blueprint("consumer_bp", __name__)
 
+@consumer_bp.get('/merchants')
+def list_merchants_public():
+    """
+    公开商户列表
+    """
+    from ..infra.repository import list_merchants
+    try:
+        ms = list_merchants()
+        # 兼容前端期望字段，提供合理默认值
+        for m in ms:
+            m.setdefault("logo_url", "")       # 暂无 logo 字段，留空
+            m.setdefault("rating", 4.8)        # 演示默认评分
+            m.setdefault("distance_km", 1.2)   # 演示默认距离
+            m.setdefault("cuisines", [])       # 暂无菜系字段
+            m.setdefault("address_area", "")   # 暂无地址区域字段
+        # 若数据库为空，返回一个演示商户，避免前端完全空白
+        if not ms:
+            ms = [{
+                "id": "demo-merchant",
+                "slug": "m1",
+                "name": "示例商户",
+                "plan": "pro",
+                "banner_url": "",
+                "theme_style": "light",
+                "logo_url": "",
+                "rating": 4.8,
+                "distance_km": 1.2,
+                "cuisines": ["咖啡", "简餐"],
+                "address_area": "朝阳区"
+            }]
+        return jsonify(ms)
+    except Exception as e:
+        return jsonify({"error": "server_error", "detail": str(e)}), 500
+
 @consumer_bp.route('/auth/login', methods=['POST'])
 def auth_login():
     payload = request.get_json(force=True) or {}
