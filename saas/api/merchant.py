@@ -1,4 +1,7 @@
 from flask import Blueprint, request, jsonify
+from flask import send_from_directory
+import os, uuid
+from werkzeug.utils import secure_filename
 from ..infra.repository import (
     list_console_orders, accept_order, complete_order, metrics_today,
     list_store_items, create_store_item, update_store_item, toggle_store_item, sort_store_items,
@@ -8,6 +11,8 @@ from ..infra.repository import (
 )
 
 merchant_bp = Blueprint('merchant', __name__)
+UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+ALLOWED_IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 @merchant_bp.route('/merchant/login', methods=['POST'])
 def login():
@@ -231,6 +236,38 @@ def post_store_status():
         return jsonify({"error": "not_found"}), 404
     return jsonify(res)
 
+@merchant_bp.put("/store_console/info")
+def put_store_info():
+    """更新门店信息：logo_url、address、business_hours、cuisines"""
+    payload = request.get_json(force=True) or {}
+    store_id = payload.get("store_id") or request.args.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    update_payload = {}
+    for k in ["logo_url", "address", "business_hours", "cuisines", "rating"]:
+        if k in payload:
+            update_payload[k] = payload[k]
+    res = update_store(store_id, update_payload)
+    if not res:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify(res)
+
+@merchant_bp.post("/merchant_console/upload")
+def merchant_upload():
+    """商户端图片上传（用于门店Logo等）"""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file provided"}), 400
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_IMAGE_EXTS:
+        return jsonify({"error": "Unsupported file type"}), 400
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    new_name = f"{uuid.uuid4().hex}.{ext}"
+    save_path = os.path.join(UPLOAD_DIR, new_name)
+    f.save(save_path)
+    url = f"/api/admin/files/{new_name}"
+    return jsonify({"url": url})
 @merchant_bp.put("/merchant_console/config")
 def put_merchant_config():
     """Update merchant global config (banner_url, theme_style)"""
