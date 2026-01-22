@@ -1,5 +1,8 @@
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify, abort, send_from_directory
 from functools import wraps
+import os
+from werkzeug.utils import secure_filename
+import uuid
 from ..infra.repository import (
     list_coupons, create_coupon, 
     list_stores, create_store, update_store, delete_store, toggle_feature,
@@ -9,6 +12,8 @@ from ..infra.repository import (
 
 
 admin_bp = Blueprint("admin_bp", __name__)
+UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+ALLOWED_IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 # 简单的硬编码 Token，实际生产应使用 JWT 或 Session
 ADMIN_TOKEN = "saas-admin-token-secret"
@@ -176,3 +181,26 @@ def del_merchant_user(merchant_id, user_id):
     if not success:
         return jsonify({"error": "User not found"}), 404
     return jsonify({"ok": True})
+
+# --- File Uploads ---
+
+@admin_bp.post("/admin/upload")
+@require_admin
+def upload_file():
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file provided"}), 400
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_IMAGE_EXTS:
+        return jsonify({"error": "Unsupported file type"}), 400
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    new_name = f"{uuid.uuid4().hex}.{ext}"
+    save_path = os.path.join(UPLOAD_DIR, new_name)
+    f.save(save_path)
+    url = f"/api/admin/files/{new_name}"
+    return jsonify({"url": url})
+
+@admin_bp.get("/admin/files/<path:filename>")
+def serve_uploaded_file(filename):
+    return send_from_directory(UPLOAD_DIR, filename)

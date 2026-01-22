@@ -253,12 +253,47 @@ def list_stores(merchant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         q = q.filter_by(tenant_id=merchant_id)
     ss = q.all()
     # merchant_id property 映射到 tenant_id
-    return [{"id": s.id, "slug": s.slug, "name": s.name, "merchant_id": s.tenant_id, "status": s.status, "features": s.features or {}} for s in ss]
+    res = []
+    for s in ss:
+        feats = dict(s.features or {})
+        res.append({
+            "id": s.id,
+            "slug": s.slug,
+            "name": s.name,
+            "merchant_id": s.tenant_id,
+            "status": s.status,
+            "features": {
+                **feats,
+                "address": feats.get("address", ""),
+                "logo_url": feats.get("logo_url", ""),
+                "cuisines": feats.get("cuisines", []),
+                "business_hours": feats.get("business_hours", ""),
+                "rating": feats.get("rating", 4.8),
+                "wallet": feats.get("wallet", False),
+                "campaign": feats.get("campaign", False),
+                "member": feats.get("member", True)
+            }
+        })
+    return res
 
 def list_stores_by_merchant(merchant_id: str) -> List[Dict[str, Any]]:
     # 显式查询指定商户
     ss = Store.query.filter_by(tenant_id=merchant_id).all()
-    return [{"id": s.id, "slug": s.slug, "name": s.name, "merchant_id": s.tenant_id} for s in ss]
+    res = []
+    for s in ss:
+        feats = dict(s.features or {})
+        res.append({
+            "id": s.id,
+            "slug": s.slug,
+            "name": s.name,
+            "merchant_id": s.tenant_id,
+            "address": feats.get("address", ""),
+            "logo_url": feats.get("logo_url", ""),
+            "cuisines": feats.get("cuisines", []),
+            "business_hours": feats.get("business_hours", ""),
+            "rating": feats.get("rating", 4.8)
+        })
+    return res
 
 def create_store(payload: Dict[str, Any]) -> Dict[str, Any]:
     merchant_id = str(payload.get("merchant_id", "m1"))
@@ -315,6 +350,15 @@ def update_store(store_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, A
         features = dict(s.features or {})
         for k, v in payload["features"].items():
             features[k] = bool(v)
+        s.features = features
+    
+    # 允许直接更新扩展字段（与 features 并存）
+    extras = ["logo_url", "address", "cuisines", "business_hours", "rating"]
+    if any(k in payload for k in extras):
+        features = dict(s.features or {})
+        for k in extras:
+            if k in payload:
+                features[k] = payload[k]
         s.features = features
         
     db.session.commit()

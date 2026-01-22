@@ -12,6 +12,7 @@ from ..infra.repository import (
     Store,
     get_merchant_by_slug,
     list_stores_by_merchant,
+    list_stores,
     create_recharge_order,
     list_recharge_orders,
     confirm_recharge_order
@@ -56,6 +57,44 @@ def list_merchants_public():
                 "address_area": "朝阳区"
             }]
         return jsonify(ms)
+    except Exception as e:
+        return jsonify({"error": "server_error", "detail": str(e)}), 500
+
+@consumer_bp.get('/stores')
+def list_stores_public():
+    """
+    公开门店列表（聚合所有商户）
+    """
+    try:
+        ss = list_stores()
+        # 展平必要字段，便于前端展示
+        res = []
+        for s in ss:
+            feats = s.get("features") or {}
+            res.append({
+                "id": s.get("id"),
+                "name": s.get("name"),
+                "merchant_id": s.get("merchant_id"),
+                "logo_url": feats.get("logo_url", ""),
+                "rating": feats.get("rating", 4.8),
+                "cuisines": feats.get("cuisines", []),
+                "address": feats.get("address", ""),
+                "address_area": feats.get("address_area", ""),
+                "distance_km": 1.2
+            })
+        if not res:
+            res = [{
+                "id": "demo-store",
+                "name": "示例门店",
+                "merchant_id": "demo-merchant",
+                "logo_url": "",
+                "rating": 4.8,
+                "cuisines": ["咖啡", "简餐"],
+                "address": "演示地址",
+                "address_area": "朝阳区",
+                "distance_km": 1.2
+            }]
+        return jsonify(res)
     except Exception as e:
         return jsonify({"error": "server_error", "detail": str(e)}), 500
 
