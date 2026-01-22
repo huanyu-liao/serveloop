@@ -18,7 +18,7 @@ from ..infra.repository import (
     list_recharge_orders,
     confirm_recharge_order
 )
-from ..infra.models import MemberAddress, db, Merchant
+from ..infra.models import MemberAddress, db, Merchant, Order
 from ..infra.context import set_temporary_tenant
 from ..services.wechat_service import jsapi_unified_order, build_jsapi_params, decrypt_notify
 from ..infra.models import RechargeOrder
@@ -283,14 +283,29 @@ def get_store_info_public(store_id):
         if m:
             m_banner = m.banner_url or ""
             m_theme = m.theme_style or "light"
-    
+    feats = store.get("features") or {}
+    logo = feats.get("logo_url", "")
+    if isinstance(logo, str) and logo.startswith("/"):
+        logo = request.url_root.rstrip("/") + logo
+    rating = feats.get("rating", 4.8)
+    monthly_sales = feats.get("monthly_sales")
+    if monthly_sales is None:
+        try:
+            now = int(time.time())
+            last_30_days = now - 30 * 24 * 3600
+            monthly_sales = Order.query.filter_by(store_id=store_id).filter(Order.status == "DONE", Order.created_at >= last_30_days).count()
+        except Exception:
+            monthly_sales = 0
     return jsonify({
         "id": store["id"],
         "name": store["name"],
-        "merchant_id": store["merchant_id"], # tenant_id
+        "merchant_id": store["merchant_id"],
         "status": store["status"],
         "banner_url": m_banner,
-        "theme_style": m_theme
+        "theme_style": m_theme,
+        "logo_url": logo,
+        "rating": rating,
+        "monthly_sales": int(monthly_sales or 0)
     })
 
 @consumer_bp.route('/stores/<store_id>/menu', methods=['GET'])
