@@ -4,6 +4,7 @@ from ..infra.repository import (
     create_order,
     list_orders,
     pay_order,
+    get_order,
     bind_phone,
     update_member_profile,
     recharge_wallet,
@@ -354,6 +355,34 @@ def pay_order_endpoint(order_id):
     if "error" in res:
         return jsonify(res), 400
     return jsonify(res)
+
+@consumer_bp.post('/orders/<order_id>/prepay')
+def pay_order_prepay(order_id):
+    payload = request.get_json(force=True) or {}
+    openid = payload.get("openid") or request.headers.get("X-User-ID", "guest")
+    order = get_order(order_id)
+    if not order:
+        return jsonify({"error": "not_found"}), 404
+    store_id = order.store_id
+    s = Store.query.get(store_id)
+    if not s:
+        return jsonify({"error": "store_not_found"}), 404
+    m = Merchant.query.get(s.tenant_id)
+    appid = request.headers.get("X-WX-AppID") or (m.slug if m else "")
+    mchid = request.headers.get("X-WX-MchID") or ""
+    notify_url = request.url_root.rstrip("/") + "/api/orders/pay/notify"
+    prepay = jsapi_unified_order(appid, mchid, openid, "Order Payment", order.id, order.price_payable_cents, notify_url, request.remote_addr)
+    if prepay.get("error"):
+        return jsonify(prepay), 400
+    params = build_jsapi_params(appid, prepay.get("prepay_id", ""))
+    return jsonify({
+        "order_id": order.id,
+        "timeStamp": params["timeStamp"],
+        "nonceStr": params["nonceStr"],
+        "package": params["package"],
+        "signType": params["signType"],
+        "paySign": params["paySign"]
+    })
 
 
 @consumer_bp.route('/wallet', methods=['GET'])
