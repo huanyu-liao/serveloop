@@ -198,7 +198,8 @@ def upload_file():
     new_name = f"{uuid.uuid4().hex}.{ext}"
     save_path = os.path.join(UPLOAD_DIR, new_name)
     f.save(save_path)
-    url = f"/api/admin/files/{new_name}"
+    base = request.url_root.rstrip("/")
+    url = f"{base}/api/admin/files/{new_name}"
     return jsonify({"url": url})
 
 @admin_bp.get("/admin/files/<path:filename>")

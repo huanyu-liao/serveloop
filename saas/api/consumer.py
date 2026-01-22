@@ -71,11 +71,14 @@ def list_stores_public():
         res = []
         for s in ss:
             feats = s.get("features") or {}
+            logo = feats.get("logo_url", "")
+            if isinstance(logo, str) and logo.startswith("/"):
+                logo = request.url_root.rstrip("/") + logo
             res.append({
                 "id": s.get("id"),
                 "name": s.get("name"),
                 "merchant_id": s.get("merchant_id"),
-                "logo_url": feats.get("logo_url", ""),
+                "logo_url": logo,
                 "rating": feats.get("rating", 4.8),
                 "cuisines": feats.get("cuisines", []),
                 "address": feats.get("address", ""),
