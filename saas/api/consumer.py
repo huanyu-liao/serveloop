@@ -228,15 +228,41 @@ def get_member_assets():
     Query: merchant_id (UUID 或 slug)
     Header: X-User-ID
     """
+    user_id = request.headers.get("X-User-ID", "guest")
     merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.args.get("merchant")
+    if not merchant_input:
+        # 平台级会员资产：跨所有商户聚合
+        from ..infra.models import Member, Wallet
+        mems = Member.query.filter_by(user_id=user_id).all()
+        total_points = 0
+        nickname = ""
+        for mem in mems:
+            try:
+                total_points += getattr(mem, "points", 0) or 0
+            except Exception:
+                pass
+            if not nickname:
+                nickname = getattr(mem, "nickname", "") or ""
+        wallets = Wallet.query.filter_by(user_id=user_id).all()
+        total_balance = 0
+        for w in wallets:
+            try:
+                total_balance += getattr(w, "balance_cents", 0) or 0
+            except Exception:
+                pass
+        return jsonify({
+            "balance_cents": int(total_balance),
+            "points": int(total_points),
+            "coupon_count": 0,
+            "nickname": nickname
+        })
+    
+    # 兼容旧逻辑：按单个商户返回会员资产
     if not merchant_input:
         merchant_input = request.headers.get("X-Tenant-ID")
     if not merchant_input:
         return jsonify({"error": "merchant_id required"}), 400
     
-    user_id = request.headers.get("X-User-ID", "guest")
-    
-    # 解析 merchant_input 可能是 UUID 或 slug
     m = Merchant.query.get(merchant_input)
     if m:
         tenant_id = m.id
@@ -247,18 +273,12 @@ def get_member_assets():
         tenant_id = m_info["id"]
     
     with set_temporary_tenant(tenant_id):
-        # Wallet
         w = get_wallet(user_id)
-        # Member Info (Points)
         from ..infra.models import Member, Coupon
         mem = Member.query.filter_by(user_id=user_id, tenant_id=tenant_id).first()
         points = mem.points if mem else 0
         nickname = getattr(mem, "nickname", "") if mem else ""
-        
-        # Coupons
-        # TODO: Implement user coupons table. For now, return 0 or list available templates
         coupon_count = 0
-        
         return jsonify({
             "balance_cents": w.get("balance_cents", 0),
             "points": points,
