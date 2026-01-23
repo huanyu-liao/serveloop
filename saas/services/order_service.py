@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from ..domain.order import new_order, OrderStatus
-from ..infra.repository import save_order, get_order, update_order_status
+from ..infra.repository import save_order, get_order, update_order_status, add_points
 
 
 from ..infra.models import Item, Store
@@ -64,7 +64,14 @@ def complete_order_service(order_id: str) -> dict:
     商家出餐服务
     将订单状态从 MAKING 变更为 DONE
     """
+    # 读取订单以计算积分
+    order = get_order(order_id)
+    if not order:
+        return {"error": "not_found"}
     if not update_order_status(order_id, OrderStatus.DONE):
         return {"error": "invalid_transition"}
+    # 完成后累计积分 (100分 = 1元)
+    points = order.price_payable_cents // 100
+    if points > 0:
+        add_points(order.user_id, points)
     return {"ok": True, "status": OrderStatus.DONE}
-

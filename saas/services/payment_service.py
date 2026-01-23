@@ -30,11 +30,5 @@ def pay_order_service(order_id: str, channel: str = "WX_JSAPI") -> dict:
         "channel": channel,
     }
     save_payment(payment)
-    
-    # 支付成功后赠送积分 (100分 = 1元)
-    points = order.price_payable_cents // 100
-    if points > 0:
-        add_points(order.user_id, points)
-        
+    # 改为在订单完成（DONE）后再累计积分
     return {"ok": True, "payment": payment}
-

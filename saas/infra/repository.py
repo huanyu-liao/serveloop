@@ -738,11 +738,23 @@ def pay_order(order_id: str, channel: str = "WX_JSAPI") -> Dict[str, Any]:
 
 def accept_order(order_id: str) -> Dict[str, Any]:
     from ..services.order_service import accept_order_service
-    return accept_order_service(order_id)
+    # 确保租户上下文
+    from .models import Order
+    o = Order.query.get(order_id)
+    if not o:
+        return {"error": "not_found"}
+    with set_temporary_tenant(o.tenant_id):
+        return accept_order_service(order_id)
 
 def complete_order(order_id: str) -> Dict[str, Any]:
     from ..services.order_service import complete_order_service
-    return complete_order_service(order_id)
+    # 确保租户上下文
+    from .models import Order
+    o = Order.query.get(order_id)
+    if not o:
+        return {"error": "not_found"}
+    with set_temporary_tenant(o.tenant_id):
+        return complete_order_service(order_id)
 
 # --- Payment ---
 
