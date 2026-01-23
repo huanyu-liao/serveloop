@@ -649,6 +649,39 @@ def post_member_profile():
         result = update_member_profile(payload)
         return jsonify(result)
 
+@consumer_bp.get("/members/profile")
+def get_member_profile():
+    """
+    获取会员资料（按商户/租户隔离）
+    Query: merchant_id 或 merchant_slug
+    Header: X-User-ID
+    """
+    merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.headers.get("X-Tenant-ID")
+    if not merchant_input:
+        return jsonify({"error": "merchant_id required"}), 400
+    user_id = request.headers.get("X-User-ID", "guest")
+    m = Merchant.query.get(merchant_input)
+    if m:
+        tenant_id = m.id
+    else:
+        m_info = get_merchant_by_slug(merchant_input)
+        if not m_info:
+            return jsonify({"error": "merchant_not_found"}), 404
+        tenant_id = m_info["id"]
+    from ..infra.models import Member
+    with set_temporary_tenant(tenant_id):
+        mem = Member.query.filter_by(user_id=user_id, tenant_id=tenant_id).first()
+        # 统一返回前端所需字段，暂未存储的字段使用合理默认值
+        return jsonify({
+            "user_id": user_id,
+            "phone": getattr(mem, "phone", "") if mem else "",
+            "nickname": getattr(mem, "nickname", "") if mem else "",
+            "points": getattr(mem, "points", 0) if mem else 0,
+            "realname": "",
+            "gender": "male",
+            "birthday": "",
+            "avatar_url": ""
+        })
 # --- Address APIs ---
 
 @consumer_bp.route('/member/addresses', methods=['GET'])
