@@ -796,7 +796,7 @@ def bind_phone(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_id = str(payload.get("user_id", "u"))
     phone = str(payload.get("phone", ""))
     nickname = str(payload.get("nickname", "")).strip()
-    _ensure_member_nickname_column()
+    _ensure_member_profile_columns()
     
     m = Member.query.filter_by(user_id=user_id, tenant_id=tid).first()
     if not m:
@@ -811,14 +811,29 @@ def bind_phone(payload: Dict[str, Any]) -> Dict[str, Any]:
     db.session.commit()
     return {"ok": True, "nickname": m.nickname or ""}
 
-def _ensure_member_nickname_column():
+def _ensure_member_profile_columns():
+    """
+    运行时保障：为 members 表补充缺失的资料字段
+    适配 MySQL；其他数据库场景下异常将被忽略（保持后端可用）
+    """
     try:
-        sql = text("SELECT COUNT(1) AS cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members' AND COLUMN_NAME = 'nickname'")
-        row = db.session.execute(sql).first()
-        cnt = int(row[0]) if row and row[0] is not None else 0
-        if cnt == 0:
-            db.session.execute(text("ALTER TABLE members ADD COLUMN nickname VARCHAR(64) DEFAULT ''"))
-            db.session.commit()
+        cols = ["nickname", "realname", "gender", "birthday", "avatar_url", "points", "phone", "user_id", "tenant_id"]
+        existing = set()
+        sql = text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members'")
+        rows = db.session.execute(sql).fetchall()
+        for r in rows or []:
+            c = r[0] if isinstance(r, tuple) else getattr(r, "COLUMN_NAME", None)
+            if c:
+                existing.add(str(c))
+        def ensure(col_name, ddl):
+            if col_name not in existing:
+                db.session.execute(text(ddl))
+        ensure("nickname", "ALTER TABLE members ADD COLUMN nickname VARCHAR(64) DEFAULT ''")
+        ensure("realname", "ALTER TABLE members ADD COLUMN realname VARCHAR(64) DEFAULT ''")
+        ensure("gender", "ALTER TABLE members ADD COLUMN gender VARCHAR(16) DEFAULT 'male'")
+        ensure("birthday", "ALTER TABLE members ADD COLUMN birthday VARCHAR(32) DEFAULT ''")
+        ensure("avatar_url", "ALTER TABLE members ADD COLUMN avatar_url VARCHAR(512) DEFAULT ''")
+        db.session.commit()
     except Exception:
         db.session.rollback()
 
@@ -826,18 +841,39 @@ def update_member_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     tid = get_current_tenant_id()
     if not tid:
         raise Exception("Missing tenant context for member profile")
-    _ensure_member_nickname_column()
+    _ensure_member_profile_columns()
     user_id = str(payload.get("user_id", "u"))
     nickname = str(payload.get("nickname", "")).strip()
+    realname = str(payload.get("realname", "")).strip()
+    gender = str(payload.get("gender", "") or "male")
+    birthday = str(payload.get("birthday", "")).strip()
+    avatar_url = str(payload.get("avatar_url", "")).strip()
     m = Member.query.filter_by(user_id=user_id, tenant_id=tid).first()
     if not m:
-        m = Member(user_id=user_id, tenant_id=tid, phone="", points=0, nickname=nickname)
+        m = Member(user_id=user_id, tenant_id=tid, phone="", points=0, nickname=nickname, realname=realname, gender=gender, birthday=birthday, avatar_url=avatar_url)
         db.session.add(m)
     else:
         if nickname:
             m.nickname = nickname
+        if realname is not None:
+            m.realname = realname
+        if gender:
+            m.gender = gender
+        if birthday is not None:
+            m.birthday = birthday
+        if avatar_url is not None:
+            m.avatar_url = avatar_url
     db.session.commit()
-    return {"ok": True, "nickname": m.nickname or ""}
+    return {
+        "ok": True,
+        "user_id": m.user_id,
+        "phone": m.phone or "",
+        "nickname": m.nickname or "",
+        "realname": m.realname or "",
+        "gender": m.gender or "male",
+        "birthday": m.birthday or "",
+        "avatar_url": m.avatar_url or ""
+    }
 
 def get_wallet(user_id: str) -> Dict[str, int]:
     tid = get_current_tenant_id()

@@ -669,7 +669,13 @@ def get_member_profile():
             return jsonify({"error": "merchant_not_found"}), 404
         tenant_id = m_info["id"]
     from ..infra.models import Member
+    from ..infra.repository import _ensure_member_profile_columns
     with set_temporary_tenant(tenant_id):
+        # 保障缺失列（老库）在运行时补齐
+        try:
+            _ensure_member_profile_columns()
+        except Exception:
+            pass
         mem = Member.query.filter_by(user_id=user_id, tenant_id=tenant_id).first()
         # 统一返回前端所需字段，暂未存储的字段使用合理默认值
         return jsonify({
@@ -677,10 +683,10 @@ def get_member_profile():
             "phone": getattr(mem, "phone", "") if mem else "",
             "nickname": getattr(mem, "nickname", "") if mem else "",
             "points": getattr(mem, "points", 0) if mem else 0,
-            "realname": "",
-            "gender": "male",
-            "birthday": "",
-            "avatar_url": ""
+            "realname": getattr(mem, "realname", "") if mem else "",
+            "gender": getattr(mem, "gender", "male") if mem else "male",
+            "birthday": getattr(mem, "birthday", "") if mem else "",
+            "avatar_url": getattr(mem, "avatar_url", "") if mem else ""
         })
 # --- Address APIs ---
 

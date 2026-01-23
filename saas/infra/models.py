@@ -156,6 +156,10 @@ class Member(db.Model, TenantMixin):
     phone = Column(String(20), default="")
     nickname = Column(String(64), default="")
     points = Column(Integer, default=0)
+    realname = Column(String(64), default="")
+    gender = Column(String(16), default="male")
+    birthday = Column(String(32), default="")
+    avatar_url = Column(String(512), default="")
 
 class Wallet(db.Model, TenantMixin):
     __tablename__ = 'wallets'
