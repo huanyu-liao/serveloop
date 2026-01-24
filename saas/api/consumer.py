@@ -325,7 +325,9 @@ def get_store_info_public(store_id):
         "theme_style": m_theme,
         "logo_url": logo,
         "rating": rating,
-        "monthly_sales": int(monthly_sales or 0)
+        "monthly_sales": int(monthly_sales or 0),
+        "address": feats.get("address", ""),
+        "business_hours": feats.get("business_hours", "")
     })
 
 @consumer_bp.route('/stores/<store_id>/menu', methods=['GET'])
