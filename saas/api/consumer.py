@@ -425,30 +425,12 @@ def pay_order_prepay(order_id):
 @consumer_bp.route('/wallet', methods=['GET'])
 def get_my_wallet():
     """
-    查询会员钱包余额
-    Query: merchant_id (UUID 或 slug，用于定位租户)
+    查询会员钱包余额（平台级）
+    不再依赖商户/租户
     Header: X-User-ID
     """
-    merchant_input = request.args.get("merchant_id") or request.args.get("merchant_slug") or request.args.get("merchant")
-    if not merchant_input:
-        merchant_input = request.headers.get("X-Tenant-ID")
-    if not merchant_input:
-        return jsonify({"error": "merchant_id required"}), 400
-    
     user_id = request.headers.get("X-User-ID", "guest")
-    
-    # 解析为租户UUID
-    m = Merchant.query.get(merchant_input)
-    if m:
-        tenant_id = m.id
-    else:
-        m_info = get_merchant_by_slug(merchant_input)
-        if not m_info:
-            return jsonify({"error": "merchant_not_found"}), 404
-        tenant_id = m_info["id"]
-    
-    with set_temporary_tenant(tenant_id):
-        return jsonify(get_wallet(user_id))
+    return jsonify(get_wallet(user_id))
 
 
 @consumer_bp.route('/wallet/recharge', methods=['POST'])

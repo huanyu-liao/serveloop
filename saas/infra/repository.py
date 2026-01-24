@@ -888,33 +888,22 @@ def update_member_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def get_wallet(user_id: str) -> Dict[str, int]:
-    tid = get_current_tenant_id()
-    if not tid:
-        return {"balance_cents": 0} # 或者报错
-        
-    w = Wallet.query.filter_by(user_id=user_id, tenant_id=tid).first()
+    w = Wallet.query.filter_by(user_id=user_id).order_by(Wallet.id.asc()).first()
     balance = w.balance_cents if w else 0
     return {"balance_cents": balance}
 
 def recharge_wallet(user_id: str, amount_cents: int) -> Dict[str, Any]:
-    tid = get_current_tenant_id()
-    if not tid:
-        raise Exception("Missing tenant context")
-        
-    w = Wallet.query.filter_by(user_id=user_id, tenant_id=tid).first()
+    w = Wallet.query.filter_by(user_id=user_id).order_by(Wallet.id.asc()).first()
     if not w:
-        w = Wallet(user_id=user_id, tenant_id=tid, balance_cents=0)
+        # 默认将平台级钱包记录的 tenant_id 固定为 'platform'
+        w = Wallet(user_id=user_id, tenant_id="platform", balance_cents=0)
         db.session.add(w)
     w.balance_cents += amount_cents
     db.session.commit()
     return {"balance_cents": w.balance_cents}
 
 def charge_wallet(user_id: str, amount_cents: int) -> bool:
-    tid = get_current_tenant_id()
-    if not tid:
-        return False
-        
-    w = Wallet.query.filter_by(user_id=user_id, tenant_id=tid).first()
+    w = Wallet.query.filter_by(user_id=user_id).order_by(Wallet.id.asc()).first()
     if not w or w.balance_cents < amount_cents:
         return False
     w.balance_cents -= amount_cents
