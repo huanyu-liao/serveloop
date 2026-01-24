@@ -910,6 +910,35 @@ def charge_wallet(user_id: str, amount_cents: int) -> bool:
     db.session.commit()
     return True
 
+def create_bill_order(user_id: str, store_id: str, amount_cents: int, remark: str = "") -> Dict[str, Any]:
+    """
+    创建优惠买单订单（无菜品项）
+    """
+    store = Store.query.get(store_id)
+    if not store:
+        raise Exception("store_not_found")
+    oid = f"b{int(time.time())}"
+    o = Order(
+        id=oid,
+        store_id=store_id,
+        tenant_id=store.tenant_id,
+        user_id=user_id,
+        order_type="BILL",
+        scene="BILL",
+        table_code="",
+        seq_no="",
+        status="CREATED",
+        price_total_cents=int(amount_cents),
+        price_payable_cents=int(amount_cents),
+        coupon_applied={},
+        remark=remark or "",
+        created_at=int(time.time()),
+        delivery_info={}
+    )
+    db.session.add(o)
+    db.session.commit()
+    return o.to_dict()
+
 def create_recharge_order(user_id: str, amount_cents: int, bonus_cents: int, channel: str = "WX_JSAPI") -> Dict[str, Any]:
     tid = get_current_tenant_id()
     if not tid:

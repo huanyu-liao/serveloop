@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from ..infra.repository import (
     get_menu_by_store,
     create_order,
+    create_bill_order,
     list_orders,
     pay_order,
     get_order,
@@ -422,6 +423,31 @@ def pay_order_prepay(order_id):
         "paySign": params["paySign"]
     })
 
+@consumer_bp.post('/bill/orders')
+def create_bill_order_endpoint():
+    """
+    创建优惠买单订单（先创建订单，再支付）
+    Body: { store_id, amount_cents, remark }
+    Header: X-User-ID
+    """
+    payload = request.get_json(force=True) or {}
+    store_id = payload.get("store_id")
+    amount = int(payload.get("amount_cents", 0))
+    remark = str(payload.get("remark", "") or "")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    if amount <= 0:
+        return jsonify({"error": "invalid_amount"}), 400
+    s = Store.query.get(store_id)
+    if not s:
+        return jsonify({"error": "store_not_found"}), 404
+    user_id = request.headers.get("X-User-ID", "guest")
+    with set_temporary_tenant(s.tenant_id):
+        try:
+            o = create_bill_order(user_id, store_id, amount, remark)
+            return jsonify(o)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
 
 @consumer_bp.route('/wallet', methods=['GET'])
 def get_my_wallet():

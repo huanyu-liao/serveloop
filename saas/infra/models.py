@@ -77,6 +77,7 @@ class Order(db.Model, TenantMixin):
     id = Column(String(64), primary_key=True)
     store_id = Column(String(32), nullable=False, index=True)
     user_id = Column(String(64), nullable=False, index=True)
+    order_type = Column(String(16), default="NORMAL")
     scene = Column(String(16), default="TABLE")
     table_code = Column(String(32), default="")
     
