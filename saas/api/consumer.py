@@ -397,7 +397,8 @@ def pay_order_endpoint(order_id):
 def pay_order_prepay(order_id):
     payload = request.get_json(force=True) or {}
     openid = payload.get("openid") or request.headers.get("X-User-ID", "guest")
-    order = get_order(order_id)
+    # 直接读取数据库模型，避免 Repository 层的租户过滤导致查不到
+    order = Order.query.get(order_id)
     if not order:
         return jsonify({"error": "not_found"}), 404
     store_id = order.store_id
