@@ -256,6 +256,12 @@ def list_stores(merchant_id: Optional[str] = None) -> List[Dict[str, Any]]:
     res = []
     for s in ss:
         feats = dict(s.features or {})
+        try:
+            avg_rating = db.session.query(func.avg(OrderReview.rating))\
+                .join(Order, OrderReview.order_id == Order.id)\
+                .filter(Order.store_id == s.id, OrderReview.rating > 0).scalar()
+        except Exception:
+            avg_rating = None
         res.append({
             "id": s.id,
             "slug": s.slug,
@@ -268,11 +274,12 @@ def list_stores(merchant_id: Optional[str] = None) -> List[Dict[str, Any]]:
                 "logo_url": feats.get("logo_url", ""),
                 "cuisines": feats.get("cuisines", []),
                 "business_hours": feats.get("business_hours", ""),
-                "rating": feats.get("rating", 4.8),
+                "rating": avg_rating if avg_rating is not None else None,
                 "wallet": feats.get("wallet", False),
                 "campaign": feats.get("campaign", False),
                 "member": feats.get("member", True)
-            }
+            },
+            "rating": float(avg_rating) if avg_rating is not None else None
         })
     return res
 
@@ -282,6 +289,12 @@ def list_stores_by_merchant(merchant_id: str) -> List[Dict[str, Any]]:
     res = []
     for s in ss:
         feats = dict(s.features or {})
+        try:
+            avg_rating = db.session.query(func.avg(OrderReview.rating))\
+                .join(Order, OrderReview.order_id == Order.id)\
+                .filter(Order.store_id == s.id, OrderReview.rating > 0).scalar()
+        except Exception:
+            avg_rating = None
         res.append({
             "id": s.id,
             "slug": s.slug,
@@ -291,7 +304,7 @@ def list_stores_by_merchant(merchant_id: str) -> List[Dict[str, Any]]:
             "logo_url": feats.get("logo_url", ""),
             "cuisines": feats.get("cuisines", []),
             "business_hours": feats.get("business_hours", ""),
-            "rating": feats.get("rating", 4.8)
+            "rating": float(avg_rating) if avg_rating is not None else None
         })
     return res
 
