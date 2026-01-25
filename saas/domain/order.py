@@ -99,7 +99,7 @@ def new_order(payload: Dict[str, Any]) -> Order:
     store_id = str(payload.get("store_id", "1"))
     user_id = str(payload.get("user_id", "u"))
     scene = str(payload.get("scene", "TABLE"))
-    table_code = str(payload.get("table_code", None))
+    table_code = str(payload.get("table_code") or "")
     remark = str(payload.get("remark", ""))
     delivery_info = payload.get("delivery_info") or {}
     items_payload = payload.get("items", [])
