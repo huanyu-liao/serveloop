@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional
 import time
 from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
-from .models import db, Merchant, Store, Category, Item, Order, OrderItem, Payment, Member, Wallet, Coupon, MerchantUser, RechargeOrder
+from .models import db, Merchant, Store, Category, Item, Order, OrderItem, Payment, Member, Wallet, Coupon, MerchantUser, RechargeOrder, OrderReview
 from ..domain.order import Order as DomainOrder, OrderStatus, can_transition, OrderItemSnapshot
 from .context import get_current_tenant_id, set_temporary_tenant
 from sqlalchemy import func, text
@@ -734,6 +734,10 @@ def list_orders_by_user(user_id: str, status: Optional[str] = None, store_id: Op
         d = o.to_dict()
         s = Store.query.get(o.store_id)
         d["store_name"] = s.name if s else ""
+        r = OrderReview.query.filter_by(order_id=o.id, user_id=user_id).first()
+        d["reviewed"] = True if r else False
+        if r:
+            d["rating"] = r.rating
         order_items = OrderItem.query.filter_by(order_id=o.id).all()
         items_dict_list = []
         for oi in order_items:
@@ -747,6 +751,39 @@ def list_orders_by_user(user_id: str, status: Optional[str] = None, store_id: Op
             d["delivery_info"] = {}
         res.append(d)
     return res
+
+def get_order_review(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    r = OrderReview.query.filter_by(order_id=order_id, user_id=user_id).first()
+    if not r:
+        return None
+    return r.to_dict()
+
+def upsert_order_review(order_id: str, user_id: str, rating: int, content: str) -> Dict[str, Any]:
+    o = Order.query.get(order_id)
+    if not o:
+        return {"error": "not_found"}
+    if o.user_id != user_id:
+        return {"error": "forbidden"}
+    r = OrderReview.query.filter_by(order_id=order_id, user_id=user_id).first()
+    now = int(time.time())
+    if r:
+        r.rating = int(rating)
+        r.content = str(content or "")
+        r.updated_at = now
+        db.session.commit()
+        return r.to_dict()
+    rr = OrderReview(
+        order_id=order_id,
+        tenant_id=o.tenant_id,
+        user_id=user_id,
+        rating=int(rating),
+        content=str(content or ""),
+        created_at=now,
+        updated_at=now
+    )
+    db.session.add(rr)
+    db.session.commit()
+    return rr.to_dict()
 def create_order(payload: Dict[str, Any]) -> Dict[str, Any]:
     from ..services.order_service import create_order_service
     return create_order_service(payload)

@@ -215,3 +215,23 @@ class MerchantUser(db.Model, TenantMixin):
     password_hash = Column(String(256), nullable=False)
     role = Column(String(16), default="STORE_ADMIN") # SUPER_ADMIN / STORE_ADMIN
     created_at = Column(BigInteger, nullable=False)
+
+class OrderReview(db.Model, TenantMixin):
+    __tablename__ = 'order_reviews'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    rating = Column(Integer, default=0)
+    content = Column(Text, default="")
+    created_at = Column(BigInteger, nullable=False)
+    updated_at = Column(BigInteger, nullable=True)
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "order_id": self.order_id,
+            "user_id": self.user_id,
+            "rating": self.rating,
+            "content": self.content,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }

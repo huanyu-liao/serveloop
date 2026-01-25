@@ -428,6 +428,29 @@ def pay_order_prepay(order_id):
         "paySign": params["paySign"]
     })
 
+@consumer_bp.get('/orders/<order_id>/review')
+def get_order_review_endpoint(order_id):
+    user_id = request.headers.get("X-User-ID", "guest")
+    from ..infra.repository import get_order_review
+    r = get_order_review(order_id, user_id)
+    if not r:
+        return jsonify({"reviewed": False})
+    return jsonify({"reviewed": True, "review": r})
+
+@consumer_bp.post('/orders/<order_id>/review')
+def post_order_review_endpoint(order_id):
+    user_id = request.headers.get("X-User-ID", "guest")
+    payload = request.get_json(force=True) or {}
+    rating = int(payload.get("rating", 0))
+    content = str(payload.get("content", "") or "")
+    if rating <= 0 or rating > 5:
+        return jsonify({"error": "invalid_rating"}), 400
+    from ..infra.repository import upsert_order_review
+    res = upsert_order_review(order_id, user_id, rating, content)
+    if "error" in res:
+        status = 403 if res["error"] == "forbidden" else 404
+        return jsonify(res), status
+    return jsonify({"ok": True, "review": res})
 @consumer_bp.post('/bill/orders')
 def create_bill_order_endpoint():
     """
