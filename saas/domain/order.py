@@ -142,7 +142,7 @@ def new_order(payload: Dict[str, Any]) -> Order:
     # 生成可读编号
     # 实际应从 Redis 或 DB 序列获取，这里简化为随机或时间戳后缀
     # MVP: 根据场景生成 A/B 前缀 + 4位时间戳
-    prefix = "A" if scene == "TABLE" else "B"
+    prefix = "A" if scene == "TABLE" else ("C" if scene == "COUPON" else "B")
     # 使用时间戳后4位模拟自增序列
     seq = str(int(time.time()))[-4:]
     seq_no = f"{prefix}{seq}"

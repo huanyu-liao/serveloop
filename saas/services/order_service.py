@@ -3,7 +3,7 @@ from ..domain.order import new_order, OrderStatus
 from ..infra.repository import save_order, get_order, update_order_status, add_points
 
 
-from ..infra.models import Item, Store
+from ..infra.models import Item, Store, Coupon
 from ..infra.context import set_temporary_tenant
 
 def create_order_service(payload: dict) -> dict:
@@ -25,22 +25,39 @@ def create_order_service(payload: dict) -> dict:
         raise ValueError("store not found")
         
     with set_temporary_tenant(store.tenant_id):
+        scene = payload.get("scene", "TABLE")
         items_payload = payload.get("items", [])
         enriched_items = []
-        for it in items_payload:
-            item_id = it.get("item_id")
-            if not item_id:
-                continue
-            item = Item.query.get(item_id)
-            if not item:
-                continue
+        
+        if scene == "COUPON":
+            for it in items_payload:
+                item_id = it.get("item_id")
+                if not item_id:
+                    continue
+                coupon = Coupon.query.get(item_id)
+                if not coupon:
+                    continue
                 
-            # 注入真实价格和名称
-            it["price_cents"] = item.base_price_cents
-            it["name"] = item.name
-            # TODO: 计算 specs 加价
-            
-            enriched_items.append(it)
+                # 注入优惠券价格和名称
+                rule = coupon.rule or {}
+                it["price_cents"] = rule.get("price_cents", 0)
+                it["name"] = rule.get("title", "特价券")
+                enriched_items.append(it)
+        else:
+            for it in items_payload:
+                item_id = it.get("item_id")
+                if not item_id:
+                    continue
+                item = Item.query.get(item_id)
+                if not item:
+                    continue
+                    
+                # 注入真实价格和名称
+                it["price_cents"] = item.base_price_cents
+                it["name"] = item.name
+                # TODO: 计算 specs 加价
+                
+                enriched_items.append(it)
         
         payload["items"] = enriched_items
         

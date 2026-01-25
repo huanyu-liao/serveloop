@@ -852,7 +852,30 @@ def save_payment(payment_dict: Dict[str, Any]) -> None:
 
 # --- Coupon ---
 
+def _ensure_coupon_columns():
+    """
+    运行时保障：为 coupons 表补充缺失字段
+    """
+    try:
+        existing = set()
+        sql = text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'coupons'")
+        rows = db.session.execute(sql).fetchall()
+        for r in rows or []:
+            c = r[0] if isinstance(r, tuple) else getattr(r, "COLUMN_NAME", None)
+            if c:
+                existing.add(str(c))
+        
+        def ensure(col_name, ddl):
+            if col_name not in existing:
+                db.session.execute(text(ddl))
+        
+        ensure("store_id", "ALTER TABLE coupons ADD COLUMN store_id VARCHAR(32)")
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def list_coupons(store_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    _ensure_coupon_columns()
     q = Coupon.query
     q = _apply_tenant_filter(q)
     if store_id:
@@ -861,6 +884,7 @@ def list_coupons(store_id: Optional[str] = None) -> List[Dict[str, Any]]:
     return [{"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status} for c in cs]
 
 def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
+    _ensure_coupon_columns()
     tid = get_current_tenant_id()
     if not tid:
         raise Exception("Missing tenant context")
@@ -879,6 +903,7 @@ def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
 
 def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    _ensure_coupon_columns()
     q = Coupon.query.filter_by(id=coupon_id)
     q = _apply_tenant_filter(q)
     c = q.first()
@@ -894,6 +919,7 @@ def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str,
     return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
 
 def delete_coupon(coupon_id: str) -> bool:
+    _ensure_coupon_columns()
     q = Coupon.query.filter_by(id=coupon_id)
     q = _apply_tenant_filter(q)
     c = q.first()
