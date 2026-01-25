@@ -676,12 +676,35 @@ def save_order(domain_order: DomainOrder) -> None:
             
     db.session.commit()
 
+def _check_expiration(o: Order) -> None:
+    """
+    检查订单是否超时（15分钟），如果超时则取消
+    """
+    if o.status == "CREATED":
+        now = int(time.time())
+        # 15分钟 = 900秒
+        if now > o.created_at + 900:
+            o.status = "CANCELLED"
+            # 尝试提交，如果外部有事务可能会合并，这里单独提交可能会有风险，
+            # 但 repository 层通常负责持久化。
+            # 为安全起见，这里只修改内存对象，依赖调用方 commit 或者 flush?
+            # 不，repository 方法通常是自包含事务的 (commits inside).
+            # 但 check_expiration 可能会被 get_order 调用，get_order 只是读取。
+            # 如果 get_order 触发写操作，是可以的 (Lazy expiration).
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
 def get_order(order_id: str) -> Optional[DomainOrder]:
     q = Order.query.filter_by(id=order_id)
     q = _apply_tenant_filter(q)
     o = q.first()
     if not o:
         return None
+    
+    _check_expiration(o)
+    
     return _model_to_domain(o)
 
 def update_order_status(order_id: str, target: OrderStatus) -> bool:
@@ -772,6 +795,8 @@ def get_order_detail(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     if o.user_id != user_id:
         return None
         
+    _check_expiration(o)
+
     d = o.to_dict()
     s = Store.query.get(o.store_id)
     d["store_name"] = s.name if s else ""
