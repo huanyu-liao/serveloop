@@ -1162,3 +1162,79 @@ def metrics_today(store_id: Optional[str] = None) -> Dict[str, Any]:
         "done": done,
         "payments_wx": payments_wx,
     }
+
+def metrics_range(start: Optional[str], end: Optional[str], store_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    按时间范围获取经营数据
+    start/end: YYYY-MM-DD 或时间戳（秒）
+    """
+    tid = get_current_tenant_id()
+    def to_ts(v: Optional[str], is_end: bool = False) -> Optional[int]:
+        if not v:
+            return None
+        try:
+            # 数字字符串当作秒级时间戳
+            if str(v).isdigit():
+                ts = int(v)
+                return ts
+            # 解析 YYYY-MM-DD
+            tm = time.strptime(str(v), "%Y-%m-%d")
+            base = int(time.mktime(tm))
+            return base + (86399 if is_end else 0)
+        except Exception:
+            return None
+    start_ts = to_ts(start, is_end=False)
+    end_ts = to_ts(end, is_end=True)
+    if not start_ts or not end_ts:
+        return metrics_today(store_id)
+    
+    order_q = Order.query
+    payment_q = Payment.query
+    
+    if tid:
+        order_q = order_q.filter_by(tenant_id=tid)
+        payment_q = payment_q.filter_by(tenant_id=tid)
+    if store_id:
+        order_q = order_q.filter_by(store_id=store_id)
+    
+    order_q = order_q.filter(Order.created_at >= start_ts, Order.created_at <= end_ts)
+    
+    total = order_q.count()
+    
+    paid_status = [OrderStatus.PAID.value, OrderStatus.MAKING.value, OrderStatus.DONE.value]
+    paid_query = order_q.filter(Order.status.in_(paid_status))
+    paid_count = paid_query.count()
+    
+    revenue = db.session.query(func.sum(Order.price_payable_cents)).filter(
+        Order.status.in_(paid_status),
+        Order.created_at >= start_ts,
+        Order.created_at <= end_ts
+    )
+    if tid:
+        revenue = revenue.filter(Order.tenant_id == tid)
+    if store_id:
+        revenue = revenue.filter(Order.store_id == store_id)
+    revenue_val = revenue.scalar() or 0
+    
+    pending_count = order_q.filter_by(status=OrderStatus.PAID.value).count()
+    making = order_q.filter_by(status=OrderStatus.MAKING.value).count()
+    done = order_q.filter_by(status=OrderStatus.DONE.value).count()
+    
+    payments_wx_q = payment_q.filter_by(channel="WX_JSAPI").filter(
+        Payment.created_at >= start_ts,
+        Payment.created_at <= end_ts
+    )
+    if store_id:
+        # 通过订单关联过滤门店
+        payments_wx_q = payments_wx_q.join(Order, Payment.order_id == Order.id).filter(Order.store_id == store_id)
+    payments_wx = payments_wx_q.count()
+    
+    return {
+        "orders_total": total,
+        "paid": pending_count,
+        "revenue_cents": int(revenue_val),
+        "making": making,
+        "done": done,
+        "payments_wx": payments_wx,
+        "range": {"start": start_ts, "end": end_ts}
+    }

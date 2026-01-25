@@ -3,7 +3,7 @@ from flask import send_from_directory
 import os, uuid
 from werkzeug.utils import secure_filename
 from ..infra.repository import (
-    list_console_orders, accept_order, complete_order, metrics_today,
+    list_console_orders, accept_order, complete_order, metrics_today, metrics_range,
     list_store_items, create_store_item, update_store_item, toggle_store_item, sort_store_items,
     list_stores_by_merchant, update_store, get_store,
     list_store_categories, create_store_category, get_merchant_by_slug, sort_store_categories,
@@ -101,6 +101,17 @@ def get_today_metrics():
     # 但前端 dashboard 通常是针对单店的
     # 如果传了 store_id，metrics_today 需要支持按 store_id 过滤
     return jsonify(metrics_today(store_id))
+
+@merchant_bp.route('/store_console/metrics', methods=['GET'])
+def get_metrics_by_range():
+    """
+    时间范围经营数据
+    Query: start=YYYY-MM-DD|ts, end=YYYY-MM-DD|ts, store_id
+    """
+    start = request.args.get("start")
+    end = request.args.get("end")
+    store_id = request.args.get("store_id")
+    return jsonify(metrics_range(start, end, store_id))
 
 
 @merchant_bp.route('/store_console/categories', methods=['GET'])
