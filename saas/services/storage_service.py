@@ -1,6 +1,8 @@
 import os
 import time
 import uuid
+import json
+from urllib import request as urllib_request
 from typing import Dict
 
 def _safe_filename(name: str) -> str:
@@ -25,15 +27,33 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
 
     if driver == "COS":
         # 期望环境变量：
-        # COS_SECRET_ID, COS_SECRET_KEY, COS_BUCKET, COS_REGION, COS_BASE_URL(可选，自定义CDN域名)
-        secret_id = os.getenv("COS_SECRET_ID")
-        secret_key = os.getenv("COS_SECRET_KEY")
+        # COS_BUCKET, COS_REGION
+        # 可选：COS_SECRET_ID, COS_SECRET_KEY (若不填则尝试获取微信云托管临时密钥)
+        # 可选：COS_BASE_URL (自定义CDN域名)
         bucket = os.getenv("COS_BUCKET")
         region = os.getenv("COS_REGION")
-        base_url = os.getenv("COS_BASE_URL")  # 例如 https://cdn.example.com
+        base_url = os.getenv("COS_BASE_URL")
+        
+        secret_id = os.getenv("COS_SECRET_ID")
+        secret_key = os.getenv("COS_SECRET_KEY")
+        token = None
+
+        # 如果没有配置永久密钥，尝试获取微信云托管临时密钥
+        if not (secret_id and secret_key):
+            try:
+                # 微信云托管内部鉴权接口
+                resp = urllib_request.urlopen("http://api.weixin.qq.com/_/cos/getauth", timeout=3)
+                if resp.status == 200:
+                    auth_data = json.loads(resp.read().decode('utf-8'))
+                    secret_id = auth_data.get("TmpSecretId")
+                    secret_key = auth_data.get("TmpSecretKey")
+                    token = auth_data.get("Token")
+            except Exception:
+                # 忽略错误，后续检查会处理缺失情况
+                pass
 
         if not all([secret_id, secret_key, bucket, region]):
-            raise RuntimeError("COS config missing: COS_SECRET_ID|COS_SECRET_KEY|COS_BUCKET|COS_REGION")
+            raise RuntimeError("COS config missing: COS_BUCKET|COS_REGION is required. COS_SECRET_ID|COS_SECRET_KEY is required unless in WXCloud environment.")
 
         try:
             # 仅在启用 COS 时尝试导入，避免未安装时报错
@@ -41,7 +61,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         except Exception:
             raise RuntimeError("Missing dependency: cos-python-sdk-v5. Please `pip install cos-python-sdk-v5`")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key, Token=token)
         client = CosS3Client(config)
         client.put_object(
             Bucket=bucket,

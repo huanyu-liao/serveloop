@@ -16,3 +16,4 @@ SQLAlchemy==2.0.45
 typing_extensions==4.15.0
 Werkzeug==3.1.4
 zipp==3.23.0
+cos-python-sdk-v5==1.9.30
