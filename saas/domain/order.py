@@ -114,24 +114,26 @@ def new_order(payload: Dict[str, Any]) -> Order:
     # 修正逻辑：如果 payload 里缺少 price/name (前端传的只有 item_id/quantity)，则这里会生成 0 元订单
     # 这就是问题所在！前端只传了 item_id 和 quantity，没有传 price_cents 和 name
     
-    for it in items_payload:
-        # 如果 payload 里没有价格，我们暂时查不到库（Domain 纯逻辑）。
-        # 必须依赖 Service 层注入。
-        # 这里先保留逻辑，等下修改 Service 层注入 Item 详情。
-        
-        price = int(it.get("price_cents", 0))
-        qty = int(it.get("quantity", 1))
-        total += price * qty
-        items.append(
-            OrderItemSnapshot(
-                item_id=str(it.get("item_id", "")),
-                name=str(it.get("name", "")),
-                price_cents=price,
-                quantity=qty,
-                specs=it.get("specs", []) or [],
-                modifiers=it.get("modifiers", []) or [],
+    # 支持 DIRECTPAY 场景：按 amount_cents 创建订单，无 items
+    if scene == "DIRECTPAY":
+        amount = int(payload.get("amount_cents", 0))
+        total = amount
+        items = []
+    else:
+        for it in items_payload:
+            price = int(it.get("price_cents", 0))
+            qty = int(it.get("quantity", 1))
+            total += price * qty
+            items.append(
+                OrderItemSnapshot(
+                    item_id=str(it.get("item_id", "")),
+                    name=str(it.get("name", "")),
+                    price_cents=price,
+                    quantity=qty,
+                    specs=it.get("specs", []) or [],
+                    modifiers=it.get("modifiers", []) or [],
+                )
             )
-        )
     
     coupon = payload.get("coupon_applied") or {}
     # TODO: 这里应加入优惠券抵扣逻辑，目前暂按原价
@@ -181,4 +183,3 @@ def can_transition(current: OrderStatus, target: OrderStatus) -> bool:
     if current == OrderStatus.MAKING and target == OrderStatus.DONE:
         return True
     return False
-

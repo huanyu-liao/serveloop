@@ -722,6 +722,31 @@ def list_orders(status: Optional[str]) -> List[Dict[str, Any]]:
 def list_console_orders(status: Optional[str]) -> List[Dict[str, Any]]:
     return list_orders(status)
 
+def list_orders_by_user(user_id: str, status: Optional[str] = None, store_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    q = Order.query.filter_by(user_id=user_id)
+    if status:
+        q = q.filter(func.lower(Order.status) == func.lower(status))
+    if store_id:
+        q = q.filter_by(store_id=store_id)
+    orders = q.order_by(Order.created_at.desc()).all()
+    res = []
+    for o in orders:
+        d = o.to_dict()
+        s = Store.query.get(o.store_id)
+        d["store_name"] = s.name if s else ""
+        order_items = OrderItem.query.filter_by(order_id=o.id).all()
+        items_dict_list = []
+        for oi in order_items:
+            oi_dict = oi.to_dict()
+            item = Item.query.filter_by(id=oi.item_id).first()
+            if item:
+                oi_dict['image_url'] = item.image_url
+            items_dict_list.append(oi_dict)
+        d["items"] = items_dict_list
+        if not d.get("delivery_info"):
+            d["delivery_info"] = {}
+        res.append(d)
+    return res
 def create_order(payload: Dict[str, Any]) -> Dict[str, Any]:
     from ..services.order_service import create_order_service
     return create_order_service(payload)
@@ -923,7 +948,6 @@ def create_bill_order(user_id: str, store_id: str, amount_cents: int, remark: st
         store_id=store_id,
         tenant_id=store.tenant_id,
         user_id=user_id,
-        order_type="BILL",
         scene="BILL",
         table_code="",
         seq_no="",

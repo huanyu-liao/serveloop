@@ -355,10 +355,15 @@ def create_order_endpoint():
     # 自动补充 user_id (Mock)
     if "user_id" not in payload:
         payload["user_id"] = request.headers.get("X-User-ID", "guest")
-        
-    # 如果没传 items，直接报错（防止创建空订单）
-    if not payload.get("items"):
-         return jsonify({"error": "empty_items"}), 400
+
+    # 允许 DIRECTPAY 场景使用 amount_cents 创建“买单”订单（无 items）
+    scene = str(payload.get("scene", "") or "")
+    if not payload.get("items") and scene != "DIRECTPAY":
+        return jsonify({"error": "empty_items"}), 400
+    if scene == "DIRECTPAY":
+        amt = int(payload.get("amount_cents", 0))
+        if amt <= 0:
+            return jsonify({"error": "invalid_amount"}), 400
 
     # 租户上下文切换!
     store_id = payload.get("store_id")
@@ -597,22 +602,10 @@ def get_orders():
     """
     store_id = request.args.get("store_id")
     status = request.args.get("status")
-    
-    # 同样需要租户上下文来过滤
-    if store_id:
-        store = Store.query.get(store_id)
-        if store:
-             with set_temporary_tenant(store.tenant_id):
-                 # 这里 list_orders 内部其实没按 user_id 过滤，MVP 假设 list_orders 应该过滤 user_id
-                 # 但 repository.list_orders 目前是查所有。我们需要修改 list_orders 支持 user_id 过滤
-                 # 暂时先全部返回，或者在 consumer.py 过滤
-                 data = list_orders(status)
-                 # 过滤当前用户
-                 user_id = request.headers.get("X-User-ID", "guest")
-                 my_orders = [o for o in data if o["user_id"] == user_id]
-                 return jsonify(my_orders)
-                 
-    return jsonify([])
+    user_id = request.headers.get("X-User-ID", "guest")
+    from ..infra.repository import list_orders_by_user
+    data = list_orders_by_user(user_id, status, store_id)
+    return jsonify(data)
 
 
 @consumer_bp.post("/members/bind_phone")
@@ -802,3 +795,23 @@ def delete_address(addr_id):
             db.session.delete(addr)
             db.session.commit()
         return jsonify({"ok": True})
+
+@consumer_bp.post('/files/upload')
+def upload_file():
+    user_id = request.headers.get("X-User-ID", "guest")
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file required"}), 400
+    filename = getattr(f, "filename", "upload.bin") or "upload.bin"
+    content_type = getattr(f, "content_type", "application/octet-stream")
+    data = f.read()
+    if not data:
+        return jsonify({"error": "empty_file"}), 400
+    if len(data) > 5 * 1024 * 1024:
+        return jsonify({"error": "file_too_large"}), 400
+    try:
+        from ..services.storage_service import upload_file_stream
+        res = upload_file_stream(user_id, filename, data, content_type)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": "upload_failed", "detail": str(e)}), 500
