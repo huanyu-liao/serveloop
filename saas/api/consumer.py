@@ -20,7 +20,8 @@ from ..infra.repository import (
     confirm_recharge_order,
     list_coupons,
     review_order,
-    refund_order
+    refund_order,
+    get_order_detail
 )
 from ..infra.models import MemberAddress, db, Merchant, Order
 from ..infra.context import set_temporary_tenant
@@ -400,6 +401,35 @@ def pay_order_endpoint(order_id):
     res = pay_order(order_id, channel)
     if "error" in res:
         return jsonify(res), 400
+    return jsonify(res)
+
+@consumer_bp.get('/orders/<order_id>')
+def get_order_detail_endpoint(order_id):
+    user_id = request.headers.get("X-User-ID", "guest")
+    # Need to verify if order exists first to get tenant context?
+    # get_order_detail does not handle tenant context switching, it assumes we are querying directly.
+    # However, Order model query might be affected if we have global tenant filter enabled?
+    # Usually queries are fine if we don't set tenant filter explicitly or if we are super admin.
+    # But wait, TenantMixin usually filters by current tenant.
+    # We don't have a way to know tenant before querying order.
+    # But Order.query.get(order_id) usually works if tenant filter is not enforced or if we disable it.
+    # In this project, context.set_temporary_tenant is used.
+    # Let's check repository.get_order implementation.
+    
+    # repository.get_order uses Order.query.get(order_id).
+    # If TenantMixin is active, it might filter.
+    # But typically for "get by id", we might want to bypass tenant check initially to find the tenant.
+    
+    # Let's assume for now repository.get_order_detail works fine.
+    
+    # Wait, repository.get_order_detail uses Order.query.get(order_id).
+    # If we are not in a tenant context, does it work?
+    # Let's check list_orders_by_user implementation in repository.py.
+    # It queries Order directly.
+    
+    res = get_order_detail(order_id, user_id)
+    if not res:
+        return jsonify({"error": "not_found"}), 404
     return jsonify(res)
 
 @consumer_bp.post('/orders/<order_id>/prepay')

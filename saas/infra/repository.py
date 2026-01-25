@@ -765,6 +765,35 @@ def list_orders_by_user(user_id: str, status: Optional[str] = None, store_id: Op
         res.append(d)
     return res
 
+def get_order_detail(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    o = Order.query.get(order_id)
+    if not o:
+        return None
+    if o.user_id != user_id:
+        return None
+        
+    d = o.to_dict()
+    s = Store.query.get(o.store_id)
+    d["store_name"] = s.name if s else ""
+    
+    r = OrderReview.query.filter_by(order_id=o.id, user_id=user_id).first()
+    d["reviewed"] = True if r else False
+    if r:
+        d["rating"] = r.rating
+        
+    order_items = OrderItem.query.filter_by(order_id=o.id).all()
+    items_dict_list = []
+    for oi in order_items:
+        oi_dict = oi.to_dict()
+        item = Item.query.filter_by(id=oi.item_id).first()
+        if item:
+            oi_dict['image_url'] = item.image_url
+        items_dict_list.append(oi_dict)
+    d["items"] = items_dict_list
+    if not d.get("delivery_info"):
+        d["delivery_info"] = {}
+    return d
+
 def get_order_review(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     r = OrderReview.query.filter_by(order_id=order_id, user_id=user_id).first()
     if not r:

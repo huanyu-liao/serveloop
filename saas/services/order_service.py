@@ -159,4 +159,4 @@ def review_order_service(order_id: str, payload: dict) -> dict:
     db.session.add(review)
     db.session.commit()
     
-    return {"ok": True, "status": OrderStatus.DONE}
+    return {"ok": True, "status": OrderStatus.REVIEWED}
