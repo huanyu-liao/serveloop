@@ -4,7 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 import uuid
 from ..infra.repository import (
-    list_coupons, create_coupon, 
+    list_coupons, create_coupon, update_coupon, delete_coupon,
     list_stores, create_store, update_store, delete_store, toggle_feature,
     list_merchants, create_merchant, get_store, update_merchant, delete_merchant,
     list_merchant_users, create_merchant_user, update_merchant_user, delete_merchant_user
@@ -89,19 +89,65 @@ def del_merchant(merchant_id):
     return jsonify({"ok": True})
 
 
-@admin_bp.get("/admin/coupons")
+@admin_bp.get("/admin/store/<store_id>/coupons")
 @require_admin
-def get_coupons():
-    data = list_coupons()
-    return jsonify(data)
+def get_store_coupons_admin(store_id):
+    s = get_store(store_id)
+    if not s:
+        return jsonify({"error": "Store not found"}), 404
+    from ..infra.context import set_temporary_tenant
+    with set_temporary_tenant(s["merchant_id"]):
+        data = list_coupons(store_id)
+        return jsonify(data)
 
 
-@admin_bp.post("/admin/coupons")
+@admin_bp.post("/admin/store/<store_id>/coupons")
 @require_admin
-def post_coupon():
+def post_store_coupon_admin(store_id):
+    s = get_store(store_id)
+    if not s:
+        return jsonify({"error": "Store not found"}), 404
     payload = request.get_json(force=True) or {}
-    result = create_coupon(payload)
-    return jsonify(result)
+    payload["store_id"] = store_id
+    from ..infra.context import set_temporary_tenant
+    with set_temporary_tenant(s["merchant_id"]):
+        result = create_coupon(payload)
+        return jsonify(result)
+
+@admin_bp.put("/admin/coupons/<coupon_id>")
+@require_admin
+def put_coupon_admin(coupon_id):
+    payload = request.get_json(force=True) or {}
+    # 需要租户上下文；根据 store_id 或 merchant_id 推导，这里简单从 store_id 推导
+    store_id = str(payload.get("store_id") or "")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    s = get_store(store_id)
+    if not s:
+        return jsonify({"error": "Store not found"}), 404
+    from ..infra.context import set_temporary_tenant
+    with set_temporary_tenant(s["merchant_id"]):
+        result = update_coupon(coupon_id, payload)
+        if not result:
+            return jsonify({"error": "Coupon not found"}), 404
+        return jsonify(result)
+
+@admin_bp.delete("/admin/coupons/<coupon_id>")
+@require_admin
+def del_coupon_admin(coupon_id):
+    # 删除时也需要租户上下文；传 store_id 以确定租户
+    store_id = request.args.get("store_id") or ""
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    s = get_store(store_id)
+    if not s:
+        return jsonify({"error": "Store not found"}), 404
+    from ..infra.context import set_temporary_tenant
+    with set_temporary_tenant(s["merchant_id"]):
+        ok = delete_coupon(coupon_id)
+        if not ok:
+            return jsonify({"error": "Coupon not found"}), 404
+        return jsonify({"ok": True})
 
 
 @admin_bp.get("/admin/stores")

@@ -852,11 +852,13 @@ def save_payment(payment_dict: Dict[str, Any]) -> None:
 
 # --- Coupon ---
 
-def list_coupons() -> List[Dict[str, Any]]:
+def list_coupons(store_id: Optional[str] = None) -> List[Dict[str, Any]]:
     q = Coupon.query
     q = _apply_tenant_filter(q)
-    cs = q.all()
-    return [{"id": c.id, "rule": c.rule, "status": c.status} for c in cs]
+    if store_id:
+        q = q.filter_by(store_id=store_id)
+    cs = q.order_by(Coupon.id.asc()).all()
+    return [{"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status} for c in cs]
 
 def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
     tid = get_current_tenant_id()
@@ -865,10 +867,41 @@ def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
         
     count = Coupon.query.filter_by(tenant_id=tid).count()
     cid = str(count + 1)
-    c = Coupon(id=cid, tenant_id=tid, rule=payload.get("rule") or {}, status="ON")
+    c = Coupon(
+        id=cid,
+        tenant_id=tid,
+        store_id=str(payload.get("store_id") or ""),
+        rule=payload.get("rule") or {},
+        status=str(payload.get("status", "ON"))
+    )
     db.session.add(c)
     db.session.commit()
-    return {"id": c.id, "rule": c.rule, "status": c.status}
+    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
+
+def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    q = Coupon.query.filter_by(id=coupon_id)
+    q = _apply_tenant_filter(q)
+    c = q.first()
+    if not c:
+        return None
+    if "store_id" in payload:
+        c.store_id = str(payload.get("store_id") or "")
+    if "rule" in payload and isinstance(payload["rule"], dict):
+        c.rule = payload["rule"]
+    if "status" in payload:
+        c.status = str(payload["status"])
+    db.session.commit()
+    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
+
+def delete_coupon(coupon_id: str) -> bool:
+    q = Coupon.query.filter_by(id=coupon_id)
+    q = _apply_tenant_filter(q)
+    c = q.first()
+    if not c:
+        return False
+    db.session.delete(c)
+    db.session.commit()
+    return True
 
 # --- Member & Wallet ---
 

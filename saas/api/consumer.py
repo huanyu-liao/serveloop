@@ -17,7 +17,8 @@ from ..infra.repository import (
     list_stores,
     create_recharge_order,
     list_recharge_orders,
-    confirm_recharge_order
+    confirm_recharge_order,
+    list_coupons
 )
 from ..infra.models import MemberAddress, db, Merchant, Order
 from ..infra.context import set_temporary_tenant
@@ -451,6 +452,36 @@ def post_order_review_endpoint(order_id):
         status = 403 if res["error"] == "forbidden" else 404
         return jsonify(res), status
     return jsonify({"ok": True, "review": res})
+@consumer_bp.get('/stores/<store_id>/coupons')
+def get_store_coupons(store_id):
+    s = Store.query.get(store_id)
+    if not s:
+        return jsonify({"error": "store_not_found"}), 404
+    with set_temporary_tenant(s.tenant_id):
+        cs = list_coupons(store_id)
+        return jsonify(cs)
+@consumer_bp.post('/coupons/purchase')
+def purchase_coupon():
+    user_id = request.headers.get("X-User-ID", "guest")
+    payload = request.get_json(force=True) or {}
+    coupon_id = str(payload.get("coupon_id", "") or "")
+    store_id = str(payload.get("store_id", "") or "")
+    if not coupon_id or not store_id:
+        return jsonify({"error": "missing_params"}), 400
+    s = Store.query.get(store_id)
+    if not s:
+        return jsonify({"error": "store_not_found"}), 404
+    data = {
+        "type": "coupon",
+        "coupon_id": coupon_id,
+        "user_id": user_id,
+        "store_id": store_id,
+        "ts": int(time.time())
+    }
+    import json, urllib.parse
+    txt = json.dumps(data, separators=(",", ":"))
+    qr = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + urllib.parse.quote(txt)
+    return jsonify({"ok": True, "qr_url": qr, "payload": data})
 @consumer_bp.post('/bill/orders')
 def create_bill_order_endpoint():
     """

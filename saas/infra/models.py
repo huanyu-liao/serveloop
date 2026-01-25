@@ -203,6 +203,7 @@ class MemberAddress(db.Model, TenantMixin):
 class Coupon(db.Model, TenantMixin):
     __tablename__ = 'coupons'
     id = Column(String(32), primary_key=True)
+    store_id = Column(String(32), nullable=True, index=True)
     rule = Column(JSON, default=dict)
     status = Column(String(16), default="ON")
 
