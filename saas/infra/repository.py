@@ -780,6 +780,7 @@ def get_order_detail(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     d["reviewed"] = True if r else False
     if r:
         d["rating"] = r.rating
+        d["review_content"] = r.content
         
     order_items = OrderItem.query.filter_by(order_id=o.id).all()
     items_dict_list = []
