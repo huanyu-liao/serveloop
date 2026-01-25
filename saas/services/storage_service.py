@@ -73,9 +73,23 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             url = f"{base_url.rstrip('/')}/{key}"
         else:
             url = f"https://{bucket}.cos.{region}.myqcloud.com/{key}"
-        return {"key": key, "url": url}
+        
+        # 构造 file_id (云托管环境)
+        # 格式通常为: cloud://<ENV_ID>.<BUCKET>-<APPID>/<KEY>
+        # 但 bucket 名字通常已经是 <name>-<appid>
+        # 如果能获取到 WX_CLOUD_ENV_ID，则尝试构造
+        env_id = os.getenv("WX_CLOUD_ENV_ID")
+        file_id = None
+        if env_id:
+            # 假设 COS_BUCKET 已经是完整名 (name-appid)
+            # 云托管的 fileID 格式有点 trick，这里尝试最通用的 cloud://<ENV_ID>.<BUCKET>/<KEY>
+            # 注意：如果 bucket 不是该环境默认的 bucket，这个 file_id 可能无效
+            file_id = f"cloud://{env_id}.{bucket}/{key}"
+        
+        return {"key": key, "url": url, "file_id": file_id}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
+
     base_dir = os.getenv("STORAGE_LOCAL_DIR") or "/tmp/saas_uploads"
     full_path = os.path.join(base_dir, key)
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
@@ -85,4 +99,52 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
     # 例如：将 base_dir 映射到 /static/uploads，从而形成 /static/...
     static_prefix = os.getenv("STORAGE_LOCAL_STATIC_PREFIX") or "/static"
     url = f"{static_prefix}/{key.split('uploads/',1)[-1]}"
-    return {"key": key, "url": url}
+    return {"key": key, "url": url, "file_id": None}
+
+
+def get_presigned_url(key: str) -> str:
+    """
+    获取文件的临时访问链接 (用于 COS 私有读)
+    如果不是 COS 驱动，返回 None 或 静态链接
+    """
+    driver = (os.getenv("STORAGE_DRIVER") or "LOCAL").upper()
+    if driver != "COS":
+        # Local storage, just return static url logic
+        # 这里简单复用 upload 的逻辑
+        static_prefix = os.getenv("STORAGE_LOCAL_STATIC_PREFIX") or "/static"
+        return f"{static_prefix}/{key.split('uploads/',1)[-1]}"
+
+    try:
+        from qcloud_cos import CosConfig, CosS3Client
+        secret_id = os.getenv("COS_SECRET_ID")
+        secret_key = os.getenv("COS_SECRET_KEY")
+        bucket = os.getenv("COS_BUCKET")
+        region = os.getenv("COS_REGION")
+        token = None
+
+        if not (secret_id and secret_key):
+             try:
+                resp = urllib_request.urlopen("http://api.weixin.qq.com/_/cos/getauth", timeout=3)
+                if resp.status == 200:
+                    auth_data = json.loads(resp.read().decode('utf-8'))
+                    secret_id = auth_data.get("TmpSecretId")
+                    secret_key = auth_data.get("TmpSecretKey")
+                    token = auth_data.get("Token")
+             except:
+                 pass
+        
+        if not all([secret_id, secret_key, bucket, region]):
+            return ""
+
+        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key, Token=token)
+        client = CosS3Client(config)
+        # 生成预签名 URL (1小时有效)
+        url = client.get_presigned_url(
+            Method='GET',
+            Bucket=bucket,
+            Key=key,
+            Expired=3600
+        )
+        return url
+    except Exception:
+        return ""
