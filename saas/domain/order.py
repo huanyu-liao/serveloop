@@ -21,6 +21,8 @@ class OrderStatus(str, Enum):
     DONE = "DONE"
     CANCELLED = "CANCELLED"
     REFUNDED = "REFUNDED"
+    WAIT_USE = "WAIT_USE"
+    REVIEWED = "REVIEWED"
 
 
 @dataclass
@@ -173,13 +175,19 @@ def can_transition(current: OrderStatus, target: OrderStatus) -> bool:
     :param target: 目标状态
     :return: 是否允许流转
     """
-    # 待支付 -> 已支付 / 已取消
-    if current == OrderStatus.CREATED and target in {OrderStatus.PAID, OrderStatus.CANCELLED}:
+    # 待支付 -> 已支付 / 已取消 / 待使用(券) / 已完成(买单)
+    if current == OrderStatus.CREATED and target in {OrderStatus.PAID, OrderStatus.CANCELLED, OrderStatus.WAIT_USE, OrderStatus.DONE}:
         return True
     # 已支付 -> 制作中 / 已退款
     if current == OrderStatus.PAID and target in {OrderStatus.MAKING, OrderStatus.REFUNDED}:
         return True
     # 制作中 -> 已完成
     if current == OrderStatus.MAKING and target == OrderStatus.DONE:
+        return True
+    # 待使用 -> 已完成 / 已退款
+    if current == OrderStatus.WAIT_USE and target in {OrderStatus.DONE, OrderStatus.REFUNDED}:
+        return True
+    # 已完成 -> 已评价
+    if current == OrderStatus.DONE and target == OrderStatus.REVIEWED:
         return True
     return False

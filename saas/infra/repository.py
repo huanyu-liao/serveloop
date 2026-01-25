@@ -831,6 +831,22 @@ def complete_order(order_id: str) -> Dict[str, Any]:
     with set_temporary_tenant(o.tenant_id):
         return complete_order_service(order_id)
 
+def review_order(order_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    from ..services.order_service import review_order_service
+    o = Order.query.get(order_id)
+    if not o:
+        return {"error": "not_found"}
+    with set_temporary_tenant(o.tenant_id):
+        return review_order_service(order_id, payload)
+
+def refund_order(order_id: str) -> Dict[str, Any]:
+    from ..services.order_service import refund_order_service
+    o = Order.query.get(order_id)
+    if not o:
+        return {"error": "not_found"}
+    with set_temporary_tenant(o.tenant_id):
+        return refund_order_service(order_id)
+
 # --- Payment ---
 
 def save_payment(payment_dict: Dict[str, Any]) -> None:

@@ -18,7 +18,9 @@ from ..infra.repository import (
     create_recharge_order,
     list_recharge_orders,
     confirm_recharge_order,
-    list_coupons
+    list_coupons,
+    review_order,
+    refund_order
 )
 from ..infra.models import MemberAddress, db, Merchant, Order
 from ..infra.context import set_temporary_tenant
@@ -442,16 +444,34 @@ def get_order_review_endpoint(order_id):
 def post_order_review_endpoint(order_id):
     user_id = request.headers.get("X-User-ID", "guest")
     payload = request.get_json(force=True) or {}
-    rating = int(payload.get("rating", 0))
-    content = str(payload.get("content", "") or "")
-    if rating <= 0 or rating > 5:
-        return jsonify({"error": "invalid_rating"}), 400
-    from ..infra.repository import upsert_order_review
-    res = upsert_order_review(order_id, user_id, rating, content)
+    
+    # Ownership check
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({"error": "not_found"}), 404
+    if order.user_id != user_id:
+        return jsonify({"error": "forbidden"}), 403
+        
+    res = review_order(order_id, payload)
     if "error" in res:
-        status = 403 if res["error"] == "forbidden" else 404
-        return jsonify(res), status
-    return jsonify({"ok": True, "review": res})
+        return jsonify(res), 400
+    return jsonify(res)
+
+@consumer_bp.post('/orders/<order_id>/refund')
+def refund_order_endpoint(order_id):
+    user_id = request.headers.get("X-User-ID", "guest")
+    
+    # Ownership check
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({"error": "not_found"}), 404
+    if order.user_id != user_id:
+        return jsonify({"error": "forbidden"}), 403
+        
+    res = refund_order(order_id)
+    if "error" in res:
+        return jsonify(res), 400
+    return jsonify(res)
 @consumer_bp.get('/stores/<store_id>/coupons')
 def get_store_coupons(store_id):
     s = Store.query.get(store_id)

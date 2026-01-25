@@ -18,8 +18,14 @@ def pay_order_service(order_id: str, channel: str = "WX_JSAPI") -> dict:
         if not charge_wallet(order.user_id, order.price_payable_cents):
             return {"error": "insufficient_balance"}
     
-    # 状态机流转：CREATED -> PAID
-    if not update_order_status(order_id, OrderStatus.PAID):
+    # 状态机流转：CREATED -> PAID / WAIT_USE / WAIT_COMMENT
+    target_status = OrderStatus.PAID
+    if order.scene == "COUPON":
+        target_status = OrderStatus.WAIT_USE
+    elif order.scene == "BILL":
+        target_status = OrderStatus.DONE
+        
+    if not update_order_status(order_id, target_status):
         return {"error": "invalid_transition"}
         
     payment = {
