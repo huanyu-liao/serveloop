@@ -31,6 +31,24 @@ def create_app(test_config=None):
     app.register_blueprint(consumer_bp, url_prefix='/api')
     app.register_blueprint(merchant_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
+
+    # 配置本地文件存储的静态资源映射 (对应 storage_service.py)
+    # 仅在 STORAGE_DRIVER=LOCAL (默认) 时生效
+    if (os.getenv("STORAGE_DRIVER") or "LOCAL").upper() == "LOCAL":
+        # 默认值需与 storage_service.py 保持一致
+        base_dir = os.getenv("STORAGE_LOCAL_DIR") or "/tmp/saas_uploads"
+        static_prefix = os.getenv("STORAGE_LOCAL_STATIC_PREFIX") or "/static"
+        
+        # storage_service 中 key = "uploads/..."
+        # 实际文件路径 = base_dir/uploads/...
+        # 生成的 URL = static_prefix/... (去掉了 uploads/)
+        # 因此映射关系为: static_prefix -> base_dir/uploads
+        uploads_serve_dir = os.path.join(base_dir, "uploads")
+        os.makedirs(uploads_serve_dir, exist_ok=True)
+
+        @app.route(f'{static_prefix}/<path:filename>')
+        def serve_uploads(filename):
+            return send_from_directory(uploads_serve_dir, filename)
     
     # 初始化数据库（开发环境方便起见）
     with app.app_context():

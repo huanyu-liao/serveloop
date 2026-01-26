@@ -30,13 +30,13 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         # COS_BUCKET, COS_REGION
         # 可选：COS_SECRET_ID, COS_SECRET_KEY (若不填则尝试获取微信云托管临时密钥)
         # 可选：COS_BASE_URL (自定义CDN域名)
-        bucket = os.getenv("COS_BUCKET")
-        region = os.getenv("COS_REGION")
-        base_url = os.getenv("COS_BASE_URL")
+        bucket = os.getenv("COS_BUCKET", "").strip()
+        region = os.getenv("COS_REGION", "").strip()
+        base_url = os.getenv("COS_BASE_URL", "").strip()
         
-        secret_id = os.getenv("COS_SECRET_ID")
-        secret_key = os.getenv("COS_SECRET_KEY")
-        token = None
+        secret_id = os.getenv("COS_SECRET_ID", "").strip()
+        secret_key = os.getenv("COS_SECRET_KEY", "").strip()
+        token = os.getenv("COS_TOKEN", "").strip() or None
 
         # 如果没有配置永久密钥，尝试获取微信云托管临时密钥
         if not (secret_id and secret_key):
@@ -50,13 +50,12 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
                     token = auth_data.get("Token")
             except Exception:
                 # 忽略错误，后续检查会处理缺失情况
+                logger.warning("Failed to get COS auth token, will try using environment variables.")
                 pass
         
         # 调试输出
         if not all([secret_id, secret_key, bucket, region]):
-             print(f"[DEBUG] Missing COS Config: bucket={bucket}, region={region}, has_secret_id={bool(secret_id)}, has_secret_key={bool(secret_key)}")
-             
-        if not all([secret_id, secret_key, bucket, region]):
+            logger.error(f"Missing COS Config: bucket={bucket}, region={region}, has_secret_id={bool(secret_id)}, has_secret_key={bool(secret_key)}")
             raise RuntimeError("COS config missing: COS_BUCKET|COS_REGION is required. COS_SECRET_ID|COS_SECRET_KEY is required unless in WXCloud environment.")
 
         try:
@@ -97,7 +96,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             Key=key,
             Expired=3600
         )
-        print('signed_url: ', signed_url)
+        logger.info('signed_url: ', signed_url)
         return {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
