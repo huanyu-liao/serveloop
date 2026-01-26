@@ -78,8 +78,8 @@ def list_stores_public():
         for s in ss:
             feats = s.get("features") or {}
             logo = feats.get("logo_url", "")
-            if isinstance(logo, str) and logo.startswith("/"):
-                logo = request.url_root.rstrip("/") + logo
+            # 假设是 Object Key，转换为 Presigned URL
+            logo = get_presigned_url(logo)
             res.append({
                 "id": s.get("id"),
                 "name": s.get("name"),
