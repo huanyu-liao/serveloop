@@ -90,7 +90,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         signed_url = client.get_presigned_url(
             Method='GET',
             Bucket=bucket,
-            Key=key,
+            Key=file_id,
             Expired=3600
         )
 
