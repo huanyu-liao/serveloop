@@ -233,36 +233,17 @@ def get_store_info():
         return jsonify({"error": "not_found"}), 404
         
     # 处理 logo_url：如果是 cloud:// 或 相对路径 key，尝试获取临时链接供前端显示
-    logo = info.get("features", {}).get("logo_url")
-    if logo:
-        # 如果是 cloud:// 开头，说明是 File ID，需要解析出 Key
-        # 格式 cloud://<env>.<bucket>/<key>
-        if logo.startswith("cloud://"):
-            try:
-                # 提取 path 部分
-                # cloud://env.bucket/path/to/file
-                # split by / at index 3?
-                parts = logo.split("/", 3)
-                if len(parts) >= 4:
-                    key = parts[3]
-                    signed_url = get_presigned_url(key)
-                    if signed_url:
-                        info["features"]["logo_display_url"] = signed_url
-            except:
-                pass
-        # 暂时兼容：如果直接存的是 Key (不带 / 或 uploads/)，也可以尝试 sign
-        # 但目前我们假设 upload 返回 file_id
-        
-        # 如果没有 logo_display_url，前端会 fallback 到 logo_url
-        # 如果 logo_url 是 cloud://，前端 img 会裂，所以最好这里替换 logo_url 或者前端适配
-        # 为了兼容 StoreSettings.vue 的 <img :src="info.features.logo_url">
-        # 我们优先把 logo_url 替换为可访问链接 (signed_url)
-        # 但保存时需要注意不要把 signed_url 存回去 (前端只读 display)
-        # StoreSettings.vue 实现中，保存时是用 info.features.logo_url
-        # 所以最好增加一个 logo_display_url 字段，前端修改一下
-        if "logo_display_url" in info["features"]:
-             # 这里不替换 logo_url，让前端决定用哪个
-             pass
+    key = info.get("features", {}).get("logo_url")
+    
+    try:
+        # 提取 path 部分
+        # cloud://env.bucket/path/to/file
+        # split by / at index 3?
+        signed_url = get_presigned_url(key)
+        if signed_url:
+            info["features"]["logo_display_url"] = signed_url
+    except:
+        pass
              
     return jsonify(info)
 
