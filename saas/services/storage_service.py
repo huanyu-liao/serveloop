@@ -90,10 +90,10 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         signed_url = client.get_presigned_url(
             Method='GET',
             Bucket=bucket,
-            Key=file_id,
+            Key=key,
             Expired=3600
         )
-
+        print('signed_url: ', signed_url)
         return {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
