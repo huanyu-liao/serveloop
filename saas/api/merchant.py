@@ -316,6 +316,7 @@ def merchant_upload():
     user_id = "merchant_console" 
     
     try:
+        print("upload_file_stream:", user_id, filename)
         res = upload_file_stream(user_id, filename, f.read(), f.content_type)
         # res: { key, url, file_id(optional) }
         return jsonify(res)

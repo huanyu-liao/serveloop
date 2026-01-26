@@ -51,7 +51,11 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             except Exception:
                 # 忽略错误，后续检查会处理缺失情况
                 pass
-
+        
+        # 调试输出
+        if not all([secret_id, secret_key, bucket, region]):
+             print(f"[DEBUG] Missing COS Config: bucket={bucket}, region={region}, has_secret_id={bool(secret_id)}, has_secret_key={bool(secret_key)}")
+             
         if not all([secret_id, secret_key, bucket, region]):
             raise RuntimeError("COS config missing: COS_BUCKET|COS_REGION is required. COS_SECRET_ID|COS_SECRET_KEY is required unless in WXCloud environment.")
 
