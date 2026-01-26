@@ -86,7 +86,15 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             # 注意：如果 bucket 不是该环境默认的 bucket，这个 file_id 可能无效
             file_id = f"cloud://{env_id}.{bucket}/{key}"
         
-        return {"key": key, "url": url, "file_id": file_id}
+        # 生成一个短期有效的签名 URL，确保即使 Bucket 是私有的，前端上传后也能立即回显
+        signed_url = client.get_presigned_url(
+            Method='GET',
+            Bucket=bucket,
+            Key=key,
+            Expired=3600
+        )
+
+        return {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
 
@@ -99,7 +107,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
     # 例如：将 base_dir 映射到 /static/uploads，从而形成 /static/...
     static_prefix = os.getenv("STORAGE_LOCAL_STATIC_PREFIX") or "/static"
     url = f"{static_prefix}/{key.split('uploads/',1)[-1]}"
-    return {"key": key, "url": url, "file_id": None}
+    return {"key": key, "url": url, "file_id": None, "signed_url": url}
 
 
 def get_presigned_url(key: str) -> str:
