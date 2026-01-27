@@ -82,6 +82,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             Expired=3600
         )
         logger.info('signed_url: ', signed_url)
+        
         return {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
