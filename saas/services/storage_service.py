@@ -40,7 +40,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         
         # 调试输出
         if not all([secret_id, secret_key, bucket, region]):
-            logger.error(f"Missing COS Config: bucket={bucket}, region={region}, has_secret_id={bool(secret_id)}, has_secret_key={bool(secret_key)}")
+            print(f"Missing COS Config: bucket={bucket}, region={region}, has_secret_id={bool(secret_id)}, has_secret_key={bool(secret_key)}")
             raise RuntimeError("COS config missing: COS_BUCKET|COS_REGION is required. COS_SECRET_ID|COS_SECRET_KEY is required unless in WXCloud environment.")
 
         try:
@@ -82,7 +82,7 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
                 Key=key,
                 Expired=3600
             )
-            logger.info('signed_url: ', signed_url)
+            print('signed_url: ', signed_url)
         except Exception as e:
             raise RuntimeError(f"Failed to generate signed URL: {e}")
             signed_url = ""
