@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, request, jsonify
 from flask import send_from_directory
 import os, uuid
@@ -10,6 +11,9 @@ from ..infra.repository import (
     authenticate_merchant_user, update_merchant
 )
 from ..services.storage_service import upload_file_stream, get_presigned_url
+
+logger = logging.getLogger('log')
+
 
 merchant_bp = Blueprint('merchant', __name__)
 UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
@@ -306,7 +310,7 @@ def merchant_upload():
     user_id = "merchant_console" 
     
     try:
-        log.info("upload_file_stream:", user_id, filename)
+        logger.info("upload_file_stream:", user_id, filename)
         res = upload_file_stream(user_id, filename, f.read(), f.content_type)
         # res: { key, url, file_id(optional) }
         return jsonify(res)
