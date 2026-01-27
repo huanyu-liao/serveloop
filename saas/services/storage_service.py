@@ -75,14 +75,18 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
             file_id = f"cloud://{env_id}.{bucket}/{key}"
         
         # 生成一个短期有效的签名 URL，确保即使 Bucket 是私有的，前端上传后也能立即回显
-        signed_url = client.get_presigned_url(
-            Method='GET',
-            Bucket=bucket,
-            Key=key,
-            Expired=3600
-        )
-        logger.info('signed_url: ', signed_url)
-        
+        try:
+            signed_url = client.get_presigned_url(
+                Method='GET',
+                Bucket=bucket,
+                Key=key,
+                Expired=3600
+            )
+            logger.info('signed_url: ', signed_url)
+        except Exception as e:
+            raise RuntimeError(f"Failed to generate signed URL: {e}")
+            signed_url = ""
+
         return {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
 
     # LOCAL 存储：开发联调用。生产请使用 COS。
