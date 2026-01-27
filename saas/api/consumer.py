@@ -26,6 +26,7 @@ from ..infra.repository import (
 from ..infra.models import MemberAddress, db, Merchant, Order
 from ..infra.context import set_temporary_tenant
 from ..services.wechat_service import jsapi_unified_order, build_jsapi_params, decrypt_notify
+from ..services.storage_service import get_presigned_url
 from ..infra.models import RechargeOrder
 import os, json, time, hmac, hashlib, base64
 from urllib import request as urlreq, parse as urlparse
