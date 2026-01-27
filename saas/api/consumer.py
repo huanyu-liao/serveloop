@@ -213,18 +213,36 @@ def get_merchant_decoration(merchant_slug):
         m = Merchant.query.get(merchant_slug)
         if not m:
             return jsonify({"error": "merchant_not_found"}), 404
+        banner_key = m.banner_url or ""
+        banner_url = banner_key
+        if banner_key:
+            try:
+                tmp = get_presigned_url(banner_key)
+                if tmp:
+                    banner_url = tmp
+            except Exception:
+                banner_url = banner_key
         return jsonify({
             "id": m.id,
             "slug": m.slug,
             "name": m.name,
-            "banner_url": m.banner_url or "",
+            "banner_url": banner_url,
             "theme_style": m.theme_style or "light"
         })
+    banner_key = m_info.get("banner_url") or ""
+    banner_url = banner_key
+    if banner_key:
+        try:
+            tmp = get_presigned_url(banner_key)
+            if tmp:
+                banner_url = tmp
+        except Exception:
+            banner_url = banner_key
     return jsonify({
         "id": m_info["id"],
         "slug": m_info.get("slug"),
         "name": m_info.get("name"),
-        "banner_url": m_info.get("banner_url") or "",
+        "banner_url": banner_url,
         "theme_style": m_info.get("theme_style") or "light"
     })
 @consumer_bp.route('/member/assets', methods=['GET'])

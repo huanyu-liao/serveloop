@@ -210,13 +210,22 @@ def get_merchant_info():
     m = Merchant.query.get(mid)
     if not m:
         return jsonify({"error": "not_found"}), 404
-        
+    banner_key = m.banner_url or ""
+    banner_display_url = ""
+    if banner_key:
+        try:
+            tmp = get_presigned_url(banner_key)
+            if tmp:
+                banner_display_url = tmp
+        except Exception:
+            banner_display_url = ""
     return jsonify({
         "id": m.id,
         "slug": m.slug,
         "name": m.name,
         "plan": m.plan,
-        "banner_url": m.banner_url,
+        "banner_url": banner_key,
+        "banner_display_url": banner_display_url,
         "theme_style": m.theme_style
     })
 
