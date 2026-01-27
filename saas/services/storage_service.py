@@ -37,21 +37,6 @@ def upload_file_stream(user_id: str, filename: str, data: bytes, content_type: s
         secret_id = os.getenv("COS_SECRET_ID", "").strip()
         secret_key = os.getenv("COS_SECRET_KEY", "").strip()
         token = os.getenv("COS_TOKEN", "").strip() or None
-
-        # 如果没有配置永久密钥，尝试获取微信云托管临时密钥
-        if not (secret_id and secret_key):
-            try:
-                # 微信云托管内部鉴权接口
-                resp = urllib_request.urlopen("http://api.weixin.qq.com/_/cos/getauth", timeout=3)
-                if resp.status == 200:
-                    auth_data = json.loads(resp.read().decode('utf-8'))
-                    secret_id = auth_data.get("TmpSecretId")
-                    secret_key = auth_data.get("TmpSecretKey")
-                    token = auth_data.get("Token")
-            except Exception:
-                # 忽略错误，后续检查会处理缺失情况
-                logger.warning("Failed to get COS auth token, will try using environment variables.")
-                pass
         
         # 调试输出
         if not all([secret_id, secret_key, bucket, region]):
@@ -132,17 +117,6 @@ def get_presigned_url(key: str) -> str:
         bucket = os.getenv("COS_BUCKET")
         region = os.getenv("COS_REGION")
         token = None
-
-        if not (secret_id and secret_key):
-             try:
-                resp = urllib_request.urlopen("http://api.weixin.qq.com/_/cos/getauth", timeout=3)
-                if resp.status == 200:
-                    auth_data = json.loads(resp.read().decode('utf-8'))
-                    secret_id = auth_data.get("TmpSecretId")
-                    secret_key = auth_data.get("TmpSecretKey")
-                    token = auth_data.get("Token")
-             except:
-                 pass
         
         if not all([secret_id, secret_key, bucket, region]):
             return ""
