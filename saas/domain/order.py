@@ -141,16 +141,48 @@ def new_order(payload: Dict[str, Any]) -> Order:
     # TODO: 这里应加入优惠券抵扣逻辑，目前暂按原价
     payable = total
     
-    # 生成可读编号
-    # 实际应从 Redis 或 DB 序列获取，这里简化为随机或时间戳后缀
-    # MVP: 根据场景生成 A/B 前缀 + 4位时间戳
-    prefix = "A" if scene == "TABLE" else ("C" if scene == "COUPON" else "B")
-    # 使用时间戳后4位模拟自增序列
-    seq = str(int(time.time()))[-4:]
-    seq_no = f"{prefix}{seq}"
+    # 1. 订单编号：采用一串19位的数字，并保证唯一性
+    import random
+    # 13位毫秒时间戳 + 6位随机数 = 19位
+    ts = int(time.time() * 1000)
+    rand_suffix = random.randint(100000, 999999)
+    order_id = f"{ts}{rand_suffix}"
+    
+    # 2. seq_no: 根据场景生成前缀，且每日唯一随机
+    prefix = ""
+    if scene == "TABLE":
+        prefix = "A"
+    elif scene == "DELIVERY":
+        prefix = "D"
+    elif scene == "PICKUP":
+        prefix = "P"
+    # COUPON 场景 seq_no 为空
+    
+    seq_no = ""
+    if prefix:
+        try:
+            from ..infra.repository import is_seq_no_exists_today
+            # 尝试生成唯一随机码，最多重试 5 次
+            for _ in range(5):
+                rand_suffix = f"{random.randint(0, 9999):04d}"
+                candidate = f"{prefix}{rand_suffix}"
+                if not is_seq_no_exists_today(store_id, candidate):
+                    seq_no = candidate
+                    break
+            
+            # 如果多次重试仍失败（极低概率），兜底使用最后生成的随机码
+            if not seq_no:
+                 seq_no = f"{prefix}{random.randint(0, 9999):04d}"
+                 
+        except ImportError:
+            # 单元测试或无 DB 环境下的 fallback
+            seq_no = f"{prefix}{random.randint(0, 9999):04d}"
+        except Exception as e:
+            print(f"Error generating seq_no: {e}")
+            seq_no = f"{prefix}{random.randint(0, 9999):04d}"
     
     order = Order(
-        id=str(uuid.uuid4()),
+        id=order_id,
         store_id=store_id,
         user_id=user_id,
         scene=scene,

@@ -1000,6 +1000,23 @@ def delete_coupon(coupon_id: str) -> bool:
     db.session.commit()
     return True
 
+def is_seq_no_exists_today(store_id: str, seq_no: str) -> bool:
+    """
+    检查今日该门店是否存在该序列号
+    """
+    from datetime import date
+    import time
+    
+    # 获取今日 0 点时间戳
+    today = date.today()
+    today_start = int(time.mktime(today.timetuple()))
+    
+    return Order.query.filter(
+        Order.store_id == store_id,
+        Order.created_at >= today_start,
+        Order.seq_no == seq_no
+    ).count() > 0
+
 # --- Member & Wallet ---
 
 def bind_phone(payload: Dict[str, Any]) -> Dict[str, Any]:
