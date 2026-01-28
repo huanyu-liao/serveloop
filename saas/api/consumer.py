@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
+from ..services.storage_service import get_presigned_url
 from ..infra.repository import (
     get_menu_by_store,
     create_order,
@@ -326,11 +327,28 @@ def get_store_info_public(store_id):
         m = Merchant.query.get(s_obj.tenant_id)
         if m:
             m_banner = m.banner_url or ""
+            # 如果是 COS Key，尝试生成预签名 URL
+            if m_banner and not m_banner.startswith("http") and not m_banner.startswith("/"):
+                try:
+                    signed = get_presigned_url(m_banner)
+                    if signed:
+                        m_banner = signed
+                except Exception:
+                    pass
             m_theme = m.theme_style or "light"
     feats = store.get("features") or {}
     logo = feats.get("logo_url", "")
-    if isinstance(logo, str) and logo.startswith("/"):
-        logo = request.url_root.rstrip("/") + logo
+    if isinstance(logo, str):
+        if logo.startswith("/"):
+            logo = request.url_root.rstrip("/") + logo
+        # 增加对 COS Key 的处理 (非 HTTP 开头且非 / 开头)
+        elif logo and not logo.startswith("http"):
+            try:
+                signed = get_presigned_url(logo)
+                if signed:
+                    logo = signed
+            except Exception:
+                pass
     rating = feats.get("rating", 4.8)
     monthly_sales = feats.get("monthly_sales")
     if monthly_sales is None:
