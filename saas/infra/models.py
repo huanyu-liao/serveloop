@@ -96,6 +96,9 @@ class Order(db.Model, TenantMixin):
     # 配送信息快照 {"name": "", "phone": "", "address": "..."}
     delivery_info = Column(JSON, default=dict)
     
+    # 唯一核销码 (主要用于 COUPON 场景)
+    verification_code = Column(String(32), default="", index=True)
+    
     # 关联 OrderItem，暂不使用 relationship，手动查询
     
     def to_dict(self):
@@ -115,7 +118,8 @@ class Order(db.Model, TenantMixin):
             "remark": self.remark,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "delivery_info": self.delivery_info
+            "delivery_info": self.delivery_info,
+            "verification_code": self.verification_code
         }
 
 class OrderItem(db.Model, TenantMixin):

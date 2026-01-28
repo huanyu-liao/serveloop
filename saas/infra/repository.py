@@ -584,14 +584,16 @@ def _domain_to_model(o: DomainOrder, tenant_id: str) -> Order:
         user_id=o.user_id,
         scene=o.scene,
         table_code=o.table_code,
-        seq_no=o.seq_no, # Add seq_no
+        seq_no=o.seq_no,
         status=o.status.value,
         price_total_cents=o.price_total_cents,
         price_payable_cents=o.price_payable_cents,
         coupon_applied=o.coupon_applied,
         remark=o.remark,
         created_at=o.created_at,
-        delivery_info=o.delivery_info
+        completed_at=o.completed_at,
+        delivery_info=o.delivery_info,
+        verification_code=o.verification_code
     )
 
 def _model_to_domain(o: Order) -> DomainOrder:
@@ -625,11 +627,13 @@ def _model_to_domain(o: Order) -> DomainOrder:
         items=items_snapshot,
         created_at=o.created_at,
         completed_at=o.completed_at,
-        seq_no=o.seq_no, # Add seq_no
-        delivery_info=o.delivery_info or {}
+        seq_no=o.seq_no,
+        delivery_info=o.delivery_info or {},
+        verification_code=o.verification_code
     )
 
 def save_order(domain_order: DomainOrder) -> None:
+    _ensure_order_columns()
     tid = get_current_tenant_id()
     # 下单时必须有租户上下文
     # 如果是 consumer api，可能需要从 store 反查，或者 payload 带
@@ -651,6 +655,8 @@ def save_order(domain_order: DomainOrder) -> None:
         existing.coupon_applied = domain_order.coupon_applied
         existing.remark = domain_order.remark
         existing.delivery_info = domain_order.delivery_info
+        existing.completed_at = domain_order.completed_at
+        existing.verification_code = domain_order.verification_code
     else:
         if not tid:
              raise Exception("Cannot create order without tenant context")
@@ -923,6 +929,40 @@ def save_payment(payment_dict: Dict[str, Any]) -> None:
 
 # --- Coupon ---
 
+def _ensure_order_columns():
+    """
+    运行时保障：为 orders 表补充缺失字段
+    """
+    try:
+        existing = set()
+        sql = text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders'")
+        rows = db.session.execute(sql).fetchall()
+        for r in rows or []:
+            c = r[0] if isinstance(r, tuple) else getattr(r, "COLUMN_NAME", None)
+            if c:
+                existing.add(str(c))
+        
+        def ensure(col_name, ddl):
+            if col_name not in existing:
+                db.session.execute(text(ddl))
+        
+        ensure("seq_no", "ALTER TABLE orders ADD COLUMN seq_no VARCHAR(16) DEFAULT ''")
+        ensure("completed_at", "ALTER TABLE orders ADD COLUMN completed_at BIGINT")
+        ensure("verification_code", "ALTER TABLE orders ADD COLUMN verification_code VARCHAR(32) DEFAULT ''")
+        # 添加索引
+        if "verification_code" not in existing:
+             # 注意：MySQL添加索引通常需要 separate statement, 或者在 ADD COLUMN 后。
+             # 这里简单起见，如果字段不存在才加，假设加字段时没加索引（DDL里没写 INDEX）
+             # ALTER TABLE orders ADD INDEX ... 是另一条语句
+             try:
+                 db.session.execute(text("CREATE INDEX idx_orders_verification_code ON orders (verification_code)"))
+             except:
+                 pass
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def _ensure_coupon_columns():
     """
     运行时保障：为 coupons 表补充缺失字段
@@ -1016,6 +1056,12 @@ def is_seq_no_exists_today(store_id: str, seq_no: str) -> bool:
         Order.created_at >= today_start,
         Order.seq_no == seq_no
     ).count() > 0
+
+def is_verification_code_exists(code: str) -> bool:
+    """
+    检查全局核销码是否存在
+    """
+    return Order.query.filter_by(verification_code=code).count() > 0
 
 # --- Member & Wallet ---
 

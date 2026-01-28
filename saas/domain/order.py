@@ -59,6 +59,7 @@ class Order:
     completed_at: int = 0
     seq_no: str = "" # 可读编号
     delivery_info: Dict[str, Any] = field(default_factory=dict) # 配送信息
+    verification_code: str = "" # 核销码
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -87,6 +88,7 @@ class Order:
             "created_at": self.created_at,
             "completed_at": self.completed_at,
             "delivery_info": self.delivery_info,
+            "verification_code": self.verification_code,
         }
 
 
@@ -181,6 +183,30 @@ def new_order(payload: Dict[str, Any]) -> Order:
             print(f"Error generating seq_no: {e}")
             seq_no = f"{prefix}{random.randint(0, 9999):04d}"
     
+    # 3. verification_code: 如果是 COUPON 订单，生成12位唯一核销码
+    verification_code = ""
+    if scene == "COUPON":
+        try:
+            from ..infra.repository import is_verification_code_exists
+            import string
+            # 字母+数字，去除易混淆字符 (I, O, 0, 1)
+            chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            for _ in range(5):
+                # 生成12位
+                code = "".join(random.choices(chars, k=12))
+                if not is_verification_code_exists(code):
+                    verification_code = code
+                    break
+            if not verification_code:
+                verification_code = "".join(random.choices(chars, k=12))
+        except ImportError:
+            chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            verification_code = "".join(random.choices(chars, k=12))
+        except Exception as e:
+            print(f"Error generating verification_code: {e}")
+            chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            verification_code = "".join(random.choices(chars, k=12))
+
     order = Order(
         id=order_id,
         store_id=store_id,
@@ -195,7 +221,8 @@ def new_order(payload: Dict[str, Any]) -> Order:
         items=items,
         created_at=int(time.time()),
         seq_no=seq_no,
-        delivery_info=delivery_info
+        delivery_info=delivery_info,
+        verification_code=verification_code
     )
     return order
 
