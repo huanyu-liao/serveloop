@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from ..domain.order import new_order, OrderStatus
-from ..infra.repository import save_order, get_order, update_order_status, add_points, find_order_by_seq_no_today
+from ..infra.repository import save_order, get_order, update_order_status, add_points, find_order_by_seq_no_today, find_order_by_verification_code
 from ..infra.context import get_current_tenant_id
 import time
 
@@ -103,10 +103,13 @@ def verify_order_service(store_id: str, code: str) -> dict:
     核销服务
     根据核销码(Order ID 或 Seq No) 查找并核销订单
     """
-    # 1. Try Order ID
-    order = get_order(code)
+    # 1. Try verification_code (COUPON)
+    order = find_order_by_verification_code(store_id, code)
+    # 2. Try Order ID
     if not order:
-        # 2. Try Seq No
+        order = get_order(code)
+    # 3. Try Seq No
+    if not order:
         order = find_order_by_seq_no_today(store_id, code)
     
     if not order:

@@ -1086,6 +1086,18 @@ def find_order_by_seq_no_today(store_id: str, seq_no: str) -> Optional[DomainOrd
         return _model_to_domain(o)
     return None
 
+def find_order_by_verification_code(store_id: str, code: str) -> Optional[DomainOrder]:
+    """
+    根据核销码查找订单（通常用于 COUPON 场景）
+    """
+    o = Order.query.filter(
+        Order.store_id == store_id,
+        Order.verification_code == code
+    ).first()
+    if o:
+        return _model_to_domain(o)
+    return None
+
 def is_verification_code_exists(code: str) -> bool:
     """
     检查全局核销码是否存在
