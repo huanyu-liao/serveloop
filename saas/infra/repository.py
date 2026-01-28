@@ -908,6 +908,15 @@ def refund_order(order_id: str) -> Dict[str, Any]:
     with set_temporary_tenant(o.tenant_id):
         return refund_order_service(order_id)
 
+def verify_order(store_id: str, code: str) -> Dict[str, Any]:
+    from ..services.order_service import verify_order_service
+    s = Store.query.get(store_id)
+    if not s:
+        return {"error": "store_not_found"}
+    with set_temporary_tenant(s.tenant_id):
+        return verify_order_service(store_id, code)
+
+
 # --- Payment ---
 
 def save_payment(payment_dict: Dict[str, Any]) -> None:
@@ -1056,6 +1065,26 @@ def is_seq_no_exists_today(store_id: str, seq_no: str) -> bool:
         Order.created_at >= today_start,
         Order.seq_no == seq_no
     ).count() > 0
+
+def find_order_by_seq_no_today(store_id: str, seq_no: str) -> Optional[DomainOrder]:
+    """
+    根据 seq_no 查找今日订单
+    """
+    from datetime import date
+    import time
+    
+    today = date.today()
+    today_start = int(time.mktime(today.timetuple()))
+    
+    o = Order.query.filter(
+        Order.store_id == store_id,
+        Order.created_at >= today_start,
+        Order.seq_no == seq_no
+    ).first()
+    
+    if o:
+        return _model_to_domain(o)
+    return None
 
 def is_verification_code_exists(code: str) -> bool:
     """

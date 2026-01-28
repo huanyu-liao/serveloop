@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from ..domain.order import new_order, OrderStatus
-from ..infra.repository import save_order, get_order, update_order_status, add_points
+from ..infra.repository import save_order, get_order, update_order_status, add_points, find_order_by_seq_no_today
 from ..infra.context import get_current_tenant_id
 import time
 
@@ -98,65 +98,37 @@ def complete_order_service(order_id: str) -> dict:
         add_points(order.user_id, points)
     return {"ok": True, "status": OrderStatus.DONE}
 
-
-def refund_order_service(order_id: str) -> dict:
+def verify_order_service(store_id: str, code: str) -> dict:
     """
-    订单退款服务
-    仅支持 COUPON 场景且状态为 WAIT_USE
+    核销服务
+    根据核销码(Order ID 或 Seq No) 查找并核销订单
     """
-    order = get_order(order_id)
+    # 1. Try Order ID
+    order = get_order(code)
     if not order:
-        return {"error": "not_found"}
+        # 2. Try Seq No
+        order = find_order_by_seq_no_today(store_id, code)
     
-    if order.scene != "COUPON":
-        return {"error": "scene_not_supported"}
-        
-    if order.status != OrderStatus.WAIT_USE:
-        return {"error": "invalid_status"}
-        
-    # TODO: Call payment refund API (Mock for now)
-    # Assume refund success
-    
-    if not update_order_status(order_id, OrderStatus.REFUNDED):
-        return {"error": "invalid_transition"}
-        
-    return {"ok": True, "status": OrderStatus.REFUNDED}
-
-
-def review_order_service(order_id: str, payload: dict) -> dict:
-    """
-    提交评价
-    状态 DONE -> REVIEWED
-    """
-    order = get_order(order_id)
     if not order:
-        return {"error": "not_found"}
+        return {"error": "not_found", "message": "核销码无效或订单不存在"}
         
-    # Validate transition first
-    if not update_order_status(order_id, OrderStatus.REVIEWED):
-        return {"error": "invalid_transition"}
+    if order.store_id != store_id:
+        return {"error": "invalid_store", "message": "非本店订单"}
         
-    # Save review
-    rating = int(payload.get("rating", 5))
-    content = str(payload.get("content", ""))
-    
-    # We need tenant context for OrderReview
-    tid = get_current_tenant_id()
-    # 如果没有租户上下文（理论上不应发生，因为是从API调用的），尝试从订单获取
-    if not tid:
-         # Hack: 假设 store_id 可以反查（但这里不好查），或者直接存库报错
-         # 依赖 API 层设置上下文
-         pass
-    
-    review = OrderReview(
-        order_id=order_id,
-        user_id=order.user_id,
-        tenant_id=tid or "unknown", # Prevent crash
-        rating=rating,
-        content=content,
-        created_at=int(time.time())
-    )
-    db.session.add(review)
-    db.session.commit()
-    
-    return {"ok": True, "status": OrderStatus.REVIEWED}
+    # Check status
+    if order.status == OrderStatus.DONE:
+        return {"error": "already_used", "message": "订单已核销"}
+        
+    # 允许核销的状态：WAIT_USE (优惠券), MAKING (自提/堂食)
+    if order.status not in [OrderStatus.WAIT_USE, OrderStatus.MAKING]:
+        return {"error": "invalid_status", "message": f"订单状态不可核销: {order.status.value}"}
+        
+    # Perform verification (complete order)
+    res = complete_order_service(order.id)
+    if "error" in res:
+         # Map error codes to friendly messages
+         if res["error"] == "invalid_transition":
+             return {"error": "invalid_transition", "message": "状态流转失败"}
+         return res
+         
+    return {"ok": True, "order": order.to_dict()}
