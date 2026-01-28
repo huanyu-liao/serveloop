@@ -38,6 +38,11 @@ def create_app(test_config=None):
         # 尝试创建表（如果不报错）
         try:
             db.create_all()
+            
+            # 自动迁移
+            from .infra.migrations import run_auto_migrations
+            run_auto_migrations()
+            
             from .infra.repository import _ensure_seed_db
             _ensure_seed_db()
         except Exception as e:
