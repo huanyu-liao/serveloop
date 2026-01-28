@@ -221,3 +221,51 @@ def verify_order_endpoint():
     if "error" in res:
         return jsonify(res), 400
     return jsonify(res)
+
+
+@merchant_bp.route('/store_console/info', methods=['GET'])
+def get_store_info_api():
+    """
+    获取门店信息
+    """
+    store_id = request.args.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    res = get_store(store_id)
+    if not res:
+        return jsonify({"error": "store not found"}), 404
+    return jsonify(res)
+
+
+@merchant_bp.route('/store_console/info', methods=['PUT'])
+def update_store_info_api():
+    """
+    更新门店信息
+    """
+    payload = request.get_json(force=True) or {}
+    store_id = payload.get("store_id")
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    res = update_store(store_id, payload)
+    if not res:
+        return jsonify({"error": "store not found"}), 404
+    return jsonify(res)
+
+
+@merchant_bp.route('/store_console/status', methods=['POST'])
+def update_store_status_api():
+    """
+    更新门店营业状态
+    POST { "store_id": "...", "status": "OPEN"|"CLOSED" }
+    """
+    payload = request.get_json(force=True) or {}
+    store_id = payload.get("store_id")
+    status = payload.get("status")
+    
+    if not store_id or not status:
+        return jsonify({"error": "missing params"}), 400
+        
+    res = update_store(store_id, {"status": status})
+    if not res:
+        return jsonify({"error": "store not found"}), 404
+    return jsonify(res)
