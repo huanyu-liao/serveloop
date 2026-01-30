@@ -20,5 +20,17 @@ def run_auto_migrations():
                     conn.execute(text("CREATE INDEX ix_orders_verification_code ON orders (verification_code)"))
                     conn.commit()
                 print("Migration done: verification_code added.")
+        
+        # Check order_items table
+        if inspector.has_table('order_items'):
+            columns = [c['name'] for c in inspector.get_columns('order_items')]
+            
+            if 'image_url' not in columns:
+                print("Migrating: Adding image_url to order_items table...")
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE order_items ADD COLUMN image_url VARCHAR(512) DEFAULT ''"))
+                    conn.commit()
+                print("Migration done: image_url added.")
+                
     except Exception as e:
         print(f"Auto migration failed: {e}")

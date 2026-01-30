@@ -610,7 +610,8 @@ def _model_to_domain(o: Order) -> DomainOrder:
             price_cents=oi.price_cents,
             quantity=oi.quantity,
             specs=oi.specs,
-            modifiers=oi.modifiers
+            modifiers=oi.modifiers,
+            image_url=oi.image_url or ""
         ) for oi in order_items
     ]
     return DomainOrder(
@@ -676,7 +677,8 @@ def save_order(domain_order: DomainOrder) -> None:
                 price_cents=it.price_cents,
                 quantity=it.quantity,
                 specs=it.specs,
-                modifiers=it.modifiers
+                modifiers=it.modifiers,
+                image_url=it.image_url
             )
             db.session.add(oi)
             

@@ -37,6 +37,7 @@ class OrderItemSnapshot:
     quantity: int
     specs: List[Dict[str, Any]] = field(default_factory=list)  # 规格快照
     modifiers: List[Dict[str, Any]] = field(default_factory=list)  # 加料快照
+    image_url: str = ""  # 图片快照
 
 
 @dataclass
@@ -82,6 +83,7 @@ class Order:
                     "quantity": i.quantity,
                     "specs": i.specs,
                     "modifiers": i.modifiers,
+                    "image_url": i.image_url,
                 }
                 for i in self.items
             ],
@@ -136,6 +138,7 @@ def new_order(payload: Dict[str, Any]) -> Order:
                     quantity=qty,
                     specs=it.get("specs", []) or [],
                     modifiers=it.get("modifiers", []) or [],
+                    image_url=str(it.get("image_url", "")),
                 )
             )
     

@@ -132,6 +132,7 @@ class OrderItem(db.Model, TenantMixin):
     quantity = Column(Integer, default=1)
     specs = Column(JSON, default=list)
     modifiers = Column(JSON, default=list)
+    image_url = Column(String(512), default="")
     
     def to_dict(self):
         return {
@@ -140,7 +141,8 @@ class OrderItem(db.Model, TenantMixin):
             "price_cents": self.price_cents,
             "quantity": self.quantity,
             "specs": self.specs,
-            "modifiers": self.modifiers
+            "modifiers": self.modifiers,
+            "image_url": self.image_url
         }
 
 class Payment(db.Model, TenantMixin):
