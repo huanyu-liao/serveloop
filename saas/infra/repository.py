@@ -1005,6 +1005,7 @@ def _ensure_coupon_columns():
                 db.session.execute(text(ddl))
         
         ensure("store_id", "ALTER TABLE coupons ADD COLUMN store_id VARCHAR(32)")
+        ensure("image_url", "ALTER TABLE coupons ADD COLUMN image_url VARCHAR(512) DEFAULT ''")
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -1016,7 +1017,7 @@ def list_coupons(store_id: Optional[str] = None) -> List[Dict[str, Any]]:
     if store_id:
         q = q.filter_by(store_id=store_id)
     cs = q.order_by(Coupon.id.asc()).all()
-    return [{"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status} for c in cs]
+    return [{"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url} for c in cs]
 
 def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_coupon_columns()
@@ -1031,11 +1032,12 @@ def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
         tenant_id=tid,
         store_id=str(payload.get("store_id") or ""),
         rule=payload.get("rule") or {},
-        status=str(payload.get("status", "ON"))
+        status=str(payload.get("status", "ON")),
+        image_url=str(payload.get("image_url") or "")
     )
     db.session.add(c)
     db.session.commit()
-    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
+    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url}
 
 def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     _ensure_coupon_columns()
@@ -1050,8 +1052,10 @@ def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str,
         c.rule = payload["rule"]
     if "status" in payload:
         c.status = str(payload["status"])
+    if "image_url" in payload:
+        c.image_url = str(payload.get("image_url") or "")
     db.session.commit()
-    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status}
+    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url}
 
 def delete_coupon(coupon_id: str) -> bool:
     _ensure_coupon_columns()
