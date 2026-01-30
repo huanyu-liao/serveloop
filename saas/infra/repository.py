@@ -603,6 +603,20 @@ def _model_to_domain(o: Order) -> DomainOrder:
     # items_q = _apply_tenant_filter(items_q) 
     order_items = items_q.all()
     
+    # Batch fetch items to avoid N+1
+    item_ids = [oi.item_id for oi in order_items]
+    image_map = {}
+    
+    if item_ids:
+        if o.scene == "COUPON":
+             coupons = Coupon.query.filter(Coupon.id.in_(item_ids)).all()
+             for c in coupons:
+                 image_map[c.id] = c.image_url
+        else:
+             items = Item.query.filter(Item.id.in_(item_ids)).all()
+             for i in items:
+                 image_map[i.id] = i.image_url
+    
     items_snapshot = [
         OrderItemSnapshot(
             item_id=oi.item_id,
@@ -611,7 +625,7 @@ def _model_to_domain(o: Order) -> DomainOrder:
             quantity=oi.quantity,
             specs=oi.specs,
             modifiers=oi.modifiers,
-            image_url=oi.image_url or ""
+            image_url=image_map.get(oi.item_id, "")
         ) for oi in order_items
     ]
     return DomainOrder(
@@ -677,8 +691,7 @@ def save_order(domain_order: DomainOrder) -> None:
                 price_cents=it.price_cents,
                 quantity=it.quantity,
                 specs=it.specs,
-                modifiers=it.modifiers,
-                image_url=it.image_url
+                modifiers=it.modifiers
             )
             db.session.add(oi)
             

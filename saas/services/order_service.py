@@ -57,7 +57,6 @@ def create_order_service(payload: dict) -> dict:
                 # 注入真实价格和名称
                 it["price_cents"] = item.base_price_cents
                 it["name"] = item.name
-                it["image_url"] = item.image_url
                 # TODO: 计算 specs 加价
                 
                 enriched_items.append(it)

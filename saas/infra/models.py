@@ -132,7 +132,7 @@ class OrderItem(db.Model, TenantMixin):
     quantity = Column(Integer, default=1)
     specs = Column(JSON, default=list)
     modifiers = Column(JSON, default=list)
-    image_url = Column(String(512), default="")
+    # image_url removed as requested, fetched dynamically
     
     def to_dict(self):
         return {
@@ -141,8 +141,7 @@ class OrderItem(db.Model, TenantMixin):
             "price_cents": self.price_cents,
             "quantity": self.quantity,
             "specs": self.specs,
-            "modifiers": self.modifiers,
-            "image_url": self.image_url
+            "modifiers": self.modifiers
         }
 
 class Payment(db.Model, TenantMixin):
@@ -212,6 +211,7 @@ class Coupon(db.Model, TenantMixin):
     store_id = Column(String(32), nullable=True, index=True)
     rule = Column(JSON, default=dict)
     status = Column(String(16), default="ON")
+    image_url = Column(String(512), default="")
 
 class MerchantUser(db.Model, TenantMixin):
     __tablename__ = 'merchant_users'
