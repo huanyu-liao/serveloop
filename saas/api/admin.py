@@ -9,7 +9,7 @@ from ..infra.repository import (
     list_merchants, create_merchant, get_store, update_merchant, delete_merchant,
     list_merchant_users, create_merchant_user, update_merchant_user, delete_merchant_user
 )
-
+from ..services import storage_service
 
 admin_bp = Blueprint("admin_bp", __name__)
 UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
@@ -98,7 +98,25 @@ def get_store_coupons_admin(store_id):
     from ..infra.context import set_temporary_tenant
     with set_temporary_tenant(s["merchant_id"]):
         data = list_coupons(store_id)
+        # 处理图片回显：将 key 转换为 signed_url
+        for item in data:
+            if item.get("image_url") and not item["image_url"].startswith("http") and "uploads/" in item["image_url"]:
+                item["image_url"] = storage_service.get_presigned_url(item["image_url"])
         return jsonify(data)
+
+
+def _extract_storage_key(url):
+    """
+    从前端提交的 URL 中提取存储 Key (uploads/...)
+    如果 URL 包含 uploads/，则提取其后缀作为 key
+    否则保持原样
+    """
+    if not url:
+        return url
+    if "uploads/" in url:
+        # 即使是完整 URL，split 也能工作
+        return "uploads/" + url.split("uploads/", 1)[1].split("?")[0]
+    return url
 
 
 @admin_bp.post("/admin/store/<store_id>/coupons")
@@ -109,6 +127,11 @@ def post_store_coupon_admin(store_id):
         return jsonify({"error": "Store not found"}), 404
     payload = request.get_json(force=True) or {}
     payload["store_id"] = store_id
+    
+    # 提取 key 存入 DB
+    if payload.get("image_url"):
+        payload["image_url"] = _extract_storage_key(payload["image_url"])
+        
     from ..infra.context import set_temporary_tenant
     with set_temporary_tenant(s["merchant_id"]):
         result = create_coupon(payload)
@@ -125,6 +148,11 @@ def put_coupon_admin(coupon_id):
     s = get_store(store_id)
     if not s:
         return jsonify({"error": "Store not found"}), 404
+        
+    # 提取 key 存入 DB
+    if payload.get("image_url"):
+        payload["image_url"] = _extract_storage_key(payload["image_url"])
+
     from ..infra.context import set_temporary_tenant
     with set_temporary_tenant(s["merchant_id"]):
         result = update_coupon(coupon_id, payload)
@@ -240,13 +268,23 @@ def upload_file():
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_IMAGE_EXTS:
         return jsonify({"error": "Unsupported file type"}), 400
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    new_name = f"{uuid.uuid4().hex}.{ext}"
-    save_path = os.path.join(UPLOAD_DIR, new_name)
-    f.save(save_path)
-    base = request.url_root.rstrip("/")
-    url = f"{base}/api/admin/files/{new_name}"
-    return jsonify({"url": url})
+    
+    # 读取文件内容
+    file_content = f.read()
+    # 假设所有 admin 上传都归属 "admin" 用户，或者可以尝试从 token 获取 info
+    user_id = "admin"
+    content_type = f.content_type or "application/octet-stream"
+
+    try:
+        # 调用 storage_service 上传
+        res = storage_service.upload_file_stream(user_id, filename, file_content, content_type)
+        # res: {"key": key, "url": url, "file_id": file_id, "signed_url": signed_url}
+        
+        # 返回 signed_url 给前端回显
+        # 注意：前端提交时会把这个 url 发回来，我们在 create/update 接口通过 _extract_storage_key 解析回 key
+        return jsonify({"url": res["signed_url"]})
+    except Exception as e:
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 @admin_bp.get("/admin/files/<path:filename>")
 def serve_uploaded_file(filename):

@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional
 import time
+import uuid
 from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
 from .models import db, Merchant, Store, Category, Item, Order, OrderItem, Payment, Member, Wallet, Coupon, MerchantUser, RechargeOrder, OrderReview
@@ -1025,8 +1026,7 @@ def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not tid:
         raise Exception("Missing tenant context")
         
-    count = Coupon.query.filter_by(tenant_id=tid).count()
-    cid = str(count + 1)
+    cid = uuid.uuid4().hex
     c = Coupon(
         id=cid,
         tenant_id=tid,
