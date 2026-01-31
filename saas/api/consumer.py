@@ -546,6 +546,10 @@ def get_store_coupons(store_id):
         return jsonify({"error": "store_not_found"}), 404
     with set_temporary_tenant(s.tenant_id):
         cs = list_coupons(store_id)
+        # 将 image_url (Key) 转换为可访问的 URL
+        for c in cs:
+            if c.get("image_url"):
+                c["image_url"] = get_presigned_url(c["image_url"])
         return jsonify(cs)
 @consumer_bp.post('/coupons/purchase')
 def purchase_coupon():
