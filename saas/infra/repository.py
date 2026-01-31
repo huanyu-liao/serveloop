@@ -429,8 +429,10 @@ def get_store(store_id: str) -> Optional[Dict[str, Any]]:
     # 2025-01: Config moved to Merchant level
     # Fetch Merchant to get banner and theme
     m = Merchant.query.get(s.tenant_id)
-    banner_url = m.banner_url if m else ""
+    # Generate presigned URL if banner_url is a key
+    banner_url = get_presigned_url(m.banner_url) if m else ""
     theme_style = m.theme_style if m else "light"
+    user_discount_rate = getattr(m, "user_discount_rate", 0) or 0
         
     return {
         "id": s.id,
@@ -440,7 +442,8 @@ def get_store(store_id: str) -> Optional[Dict[str, Any]]:
         "status": s.status, 
         "features": s.features or {},
         "banner_url": banner_url, 
-        "theme_style": theme_style
+        "theme_style": theme_style,
+        "user_discount_rate": user_discount_rate
     }
 
 # --- Menu ---

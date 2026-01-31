@@ -320,24 +320,12 @@ def get_store_info_public(store_id):
     if not store:
         return jsonify({"error": "not_found"}), 404
     
-    s_obj = Store.query.get(store_id)
-    m_banner = ""
-    m_theme = "light"
-    user_discount_rate = 0
-    if s_obj:
-        m = Merchant.query.get(s_obj.tenant_id)
-        if m:
-            m_banner = m.banner_url or ""
-            # 如果是 COS Key，尝试生成预签名 URL
-            if m_banner and not m_banner.startswith("http") and not m_banner.startswith("/"):
-                try:
-                    signed = get_presigned_url(m_banner)
-                    if signed:
-                        m_banner = signed
-                except Exception:
-                    pass
-            m_theme = m.theme_style or "light"
-            user_discount_rate = getattr(m, "user_discount_rate", 0) or 0
+    s_obj = None # Deprecated usage
+    
+    m_banner = store.get("banner_url", "")
+    m_theme = store.get("theme_style", "light")
+    user_discount_rate = store.get("user_discount_rate", 0)
+
     feats = store.get("features") or {}
     logo = feats.get("logo_url", "")
     if isinstance(logo, str):
