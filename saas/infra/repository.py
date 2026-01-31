@@ -787,9 +787,14 @@ def list_orders(status: Optional[str]) -> List[Dict[str, Any]]:
         for oi in order_items:
             oi_dict = oi.to_dict()
             # Fetch item to get image_url
-            item = Item.query.filter_by(id=oi.item_id).first()
-            if item:
-                oi_dict['image_url'] = item.image_url
+            if o.scene == "COUPON":
+                c = Coupon.query.get(oi.item_id)
+                if c:
+                    oi_dict['image_url'] = c.image_url
+            else:
+                item = Item.query.filter_by(id=oi.item_id).first()
+                if item:
+                    oi_dict['image_url'] = item.image_url
             items_dict_list.append(oi_dict)
             
         d["items"] = items_dict_list
