@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from ..domain.order import new_order, OrderStatus
-from ..infra.repository import save_order, get_order, update_order_status, add_points, find_order_by_seq_no_today, find_order_by_verification_code
+from ..infra.repository import save_order, get_order, update_order_status, add_points, find_order_by_seq_no_today, find_order_by_verification_code, upsert_order_review
 from ..infra.context import get_current_tenant_id
 import time
 
@@ -98,6 +98,7 @@ def complete_order_service(order_id: str) -> dict:
         add_points(order.user_id, points)
     return {"ok": True, "status": OrderStatus.DONE}
 
+
 def verify_order_service(store_id: str, code: str) -> dict:
     """
     核销服务
@@ -135,3 +136,34 @@ def verify_order_service(store_id: str, code: str) -> dict:
          return res
          
     return {"ok": True, "order": order.to_dict()}
+
+
+def review_order_service(order_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    评价订单
+    """
+    user_id = payload.get("user_id")
+    if not user_id:
+        return {"error": "user_id required"}
+    
+    rating = payload.get("rating", 5)
+    content = payload.get("content", "")
+    
+    # 1. Update review record
+    res = upsert_order_review(order_id, user_id, rating, content)
+    if "error" in res:
+        return res
+        
+    # 2. Update order status to REVIEWED
+    update_order_status(order_id, OrderStatus.REVIEWED)
+    
+    return res
+
+
+def refund_order_service(order_id: str) -> Dict[str, Any]:
+    """
+    退款订单
+    """
+    if not update_order_status(order_id, OrderStatus.REFUNDED):
+        return {"error": "invalid_transition"}
+    return {"ok": True, "status": OrderStatus.REFUNDED}
