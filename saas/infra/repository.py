@@ -7,6 +7,7 @@ from .models import db, Merchant, Store, Category, Item, Order, OrderItem, Payme
 from ..domain.order import Order as DomainOrder, OrderStatus, can_transition, OrderItemSnapshot
 from .context import get_current_tenant_id, set_temporary_tenant
 from sqlalchemy import func, text
+from ..services.storage_service import get_presigned_url
 
 # 兼容旧接口的 Repository 层
 
@@ -800,9 +801,23 @@ def list_orders_by_user(user_id: str, status: Optional[str] = None, store_id: Op
         items_dict_list = []
         for oi in order_items:
             oi_dict = oi.to_dict()
-            item = Item.query.filter_by(id=oi.item_id).first()
-            if item:
-                oi_dict['image_url'] = item.image_url
+            img = ""
+            if o.scene == "COUPON":
+                # Coupon order items refer to coupon_id
+                c = Coupon.query.get(oi.item_id)
+                if c:
+                    img = c.image_url
+            else:
+                # Normal items
+                item = Item.query.filter_by(id=oi.item_id).first()
+                if item:
+                    img = item.image_url
+            
+            if img:
+                oi_dict['image_url'] = get_presigned_url(img)
+            else:
+                oi_dict['image_url'] = ""
+
             items_dict_list.append(oi_dict)
         d["items"] = items_dict_list
         if not d.get("delivery_info"):
@@ -833,9 +848,21 @@ def get_order_detail(order_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     items_dict_list = []
     for oi in order_items:
         oi_dict = oi.to_dict()
-        item = Item.query.filter_by(id=oi.item_id).first()
-        if item:
-            oi_dict['image_url'] = item.image_url
+        img = ""
+        if o.scene == "COUPON":
+            c = Coupon.query.get(oi.item_id)
+            if c:
+                img = c.image_url
+        else:
+            item = Item.query.filter_by(id=oi.item_id).first()
+            if item:
+                img = item.image_url
+        
+        if img:
+            oi_dict['image_url'] = get_presigned_url(img)
+        else:
+            oi_dict['image_url'] = ""
+
         items_dict_list.append(oi_dict)
     d["items"] = items_dict_list
     if not d.get("delivery_info"):
