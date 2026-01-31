@@ -79,7 +79,9 @@ def list_merchants() -> List[Dict[str, Any]]:
         "name": m.name,
         "plan": m.plan,
         "banner_url": getattr(m, "banner_url", "") or "",
-        "theme_style": getattr(m, "theme_style", "light") or "light"
+        "theme_style": getattr(m, "theme_style", "light") or "light",
+        "user_discount_rate": getattr(m, "user_discount_rate", 0) or 0,
+        "platform_commission_rate": getattr(m, "platform_commission_rate", 0) or 0
     } for m in ms]
 
 def create_merchant(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -94,11 +96,20 @@ def create_merchant(payload: Dict[str, Any]) -> Dict[str, Any]:
         id=mid,
         slug=slug,
         name=payload.get("name") or f"商户{slug}",
-        plan=payload.get("plan") or "basic"
+        plan=payload.get("plan") or "basic",
+        user_discount_rate=int(payload.get("user_discount_rate", 0)),
+        platform_commission_rate=int(payload.get("platform_commission_rate", 0))
     )
     db.session.add(m)
     db.session.commit()
-    return {"id": m.id, "slug": m.slug, "name": m.name, "plan": m.plan}
+    return {
+        "id": m.id, 
+        "slug": m.slug, 
+        "name": m.name, 
+        "plan": m.plan,
+        "user_discount_rate": m.user_discount_rate,
+        "platform_commission_rate": m.platform_commission_rate
+    }
 
 def update_merchant(merchant_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # 优先根据 UUID 查找，如果找不到再尝试根据 Slug 查找
@@ -119,6 +130,11 @@ def update_merchant(merchant_id: str, payload: Dict[str, Any]) -> Optional[Dict[
     if "theme_style" in payload:
         m.theme_style = str(payload["theme_style"])
         
+    if "user_discount_rate" in payload:
+        m.user_discount_rate = int(payload["user_discount_rate"])
+    if "platform_commission_rate" in payload:
+        m.platform_commission_rate = int(payload["platform_commission_rate"])
+        
     db.session.commit()
     return {
         "id": m.id, 
@@ -126,7 +142,9 @@ def update_merchant(merchant_id: str, payload: Dict[str, Any]) -> Optional[Dict[
         "name": m.name, 
         "plan": m.plan,
         "banner_url": m.banner_url,
-        "theme_style": m.theme_style
+        "theme_style": m.theme_style,
+        "user_discount_rate": m.user_discount_rate,
+        "platform_commission_rate": m.platform_commission_rate
     }
 
 def delete_merchant(merchant_id: str) -> bool:

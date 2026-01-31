@@ -32,5 +32,23 @@ def run_auto_migrations():
                     conn.commit()
                 print("Migration done: image_url added to coupons.")
 
+        # Check merchants table
+        if inspector.has_table('merchants'):
+            columns = [c['name'] for c in inspector.get_columns('merchants')]
+            
+            if 'user_discount_rate' not in columns:
+                print("Migrating: Adding user_discount_rate to merchants table...")
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE merchants ADD COLUMN user_discount_rate INTEGER DEFAULT 0"))
+                    conn.commit()
+                print("Migration done: user_discount_rate added.")
+            
+            if 'platform_commission_rate' not in columns:
+                print("Migrating: Adding platform_commission_rate to merchants table...")
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE merchants ADD COLUMN platform_commission_rate INTEGER DEFAULT 0"))
+                    conn.commit()
+                print("Migration done: platform_commission_rate added.")
+
     except Exception as e:
         print(f"Auto migration failed: {e}")

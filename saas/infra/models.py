@@ -23,6 +23,10 @@ class Merchant(db.Model):
     # 全局配置 (原在Store, 现移至Merchant)
     banner_url = Column(String(512), default="")
     theme_style = Column(String(32), default="light")
+    
+    # 新增配置字段
+    user_discount_rate = Column(Integer, default=0) # 用户折扣 (0-100)
+    platform_commission_rate = Column(Integer, default=0) # 平台抽成 (0-100)
 
 class Store(db.Model, TenantMixin):
     __tablename__ = 'stores'
