@@ -1290,6 +1290,16 @@ def create_bill_order(user_id: str, store_id: str, amount_cents: int, remark: st
     store = Store.query.get(store_id)
     if not store:
         raise Exception("store_not_found")
+    
+    # 获取商户折扣
+    m = Merchant.query.get(store.tenant_id)
+    discount_rate = getattr(m, "user_discount_rate", 0) or 0
+    
+    # 计算实际应付金额
+    payable_cents = amount_cents
+    if discount_rate > 0 and discount_rate < 100:
+        payable_cents = int(amount_cents * discount_rate / 100)
+    
     oid = f"b{int(time.time())}"
     o = Order(
         id=oid,
@@ -1301,7 +1311,7 @@ def create_bill_order(user_id: str, store_id: str, amount_cents: int, remark: st
         seq_no="",
         status="CREATED",
         price_total_cents=int(amount_cents),
-        price_payable_cents=int(amount_cents),
+        price_payable_cents=int(payable_cents),
         coupon_applied={},
         remark=remark or "",
         created_at=int(time.time()),

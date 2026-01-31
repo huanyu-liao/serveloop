@@ -323,6 +323,7 @@ def get_store_info_public(store_id):
     s_obj = Store.query.get(store_id)
     m_banner = ""
     m_theme = "light"
+    user_discount_rate = 0
     if s_obj:
         m = Merchant.query.get(s_obj.tenant_id)
         if m:
@@ -336,6 +337,7 @@ def get_store_info_public(store_id):
                 except Exception:
                     pass
             m_theme = m.theme_style or "light"
+            user_discount_rate = getattr(m, "user_discount_rate", 0) or 0
     feats = store.get("features") or {}
     logo = feats.get("logo_url", "")
     if isinstance(logo, str):
@@ -368,6 +370,7 @@ def get_store_info_public(store_id):
         "logo_url": logo,
         "rating": rating,
         "monthly_sales": int(monthly_sales or 0),
+        "user_discount_rate": user_discount_rate,
         "address": feats.get("address", ""),
         "business_hours": feats.get("business_hours", "")
     })
@@ -423,6 +426,36 @@ def create_order_endpoint():
             return jsonify(order)
         except Exception as e:
             # Log error stack trace for debugging 500s or hidden errors
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 400
+
+
+@consumer_bp.route('/bill/orders', methods=['POST'])
+def create_bill_order_endpoint():
+    """
+    创建优惠买单订单（专用接口）
+    """
+    payload = request.get_json()
+    user_id = request.headers.get("X-User-ID", "guest")
+    store_id = payload.get("store_id")
+    amount_cents = int(payload.get("amount_cents", 0))
+    remark = payload.get("remark", "")
+    
+    if not store_id:
+        return jsonify({"error": "store_id required"}), 400
+    if amount_cents <= 0:
+        return jsonify({"error": "invalid_amount"}), 400
+        
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({"error": "store_not_found"}), 404
+        
+    with set_temporary_tenant(store.tenant_id):
+        try:
+            order = create_bill_order(user_id, store_id, amount_cents, remark)
+            return jsonify(order)
+        except Exception as e:
             import traceback
             traceback.print_exc()
             return jsonify({"error": str(e)}), 400
