@@ -1433,9 +1433,14 @@ def add_points(user_id: str, points: int) -> int:
 def metrics_today(store_id: Optional[str] = None) -> Dict[str, Any]:
     tid = get_current_tenant_id()
     
-    # 构造基础查询
-    order_q = Order.query
-    payment_q = Payment.query
+    # 1. 计算今日零点时间戳
+    from datetime import date
+    today = date.today()
+    today_start = int(time.mktime(today.timetuple()))
+    
+    # 构造基础查询，增加时间过滤
+    order_q = Order.query.filter(Order.created_at >= today_start)
+    payment_q = Payment.query.filter(Payment.created_at >= today_start)
     
     if tid:
         order_q = order_q.filter_by(tenant_id=tid)
@@ -1449,12 +1454,13 @@ def metrics_today(store_id: Optional[str] = None) -> Dict[str, Any]:
     
     total = order_q.count()
     
-    paid_status = [OrderStatus.PAID.value, OrderStatus.MAKING.value, OrderStatus.DONE.value]
+    paid_status = [OrderStatus.PAID.value, OrderStatus.MAKING.value, OrderStatus.DONE.value, OrderStatus.REVIEWED.value]
     paid_query = order_q.filter(Order.status.in_(paid_status))
     paid_count = paid_query.count()
     
     revenue = db.session.query(func.sum(Order.price_payable_cents)).filter(
-        Order.status.in_(paid_status)
+        Order.status.in_(paid_status),
+        Order.created_at >= today_start
     )
     if tid:
         revenue = revenue.filter(Order.tenant_id == tid)
@@ -1462,11 +1468,12 @@ def metrics_today(store_id: Optional[str] = None) -> Dict[str, Any]:
         revenue = revenue.filter(Order.store_id == store_id)
         
     revenue_val = revenue.scalar() or 0
+
     
     # 修改待接单数量逻辑：PAID 状态即为待接单
     pending_count = order_q.filter_by(status=OrderStatus.PAID.value).count()
     making = order_q.filter_by(status=OrderStatus.MAKING.value).count()
-    done = order_q.filter_by(status=OrderStatus.DONE.value).count()
+    done = order_q.filter(Order.status.in_([OrderStatus.DONE.value, OrderStatus.REVIEWED.value])).count()
     
     payments_wx = payment_q.filter_by(channel="WX_JSAPI").count()
     
@@ -1517,7 +1524,7 @@ def metrics_range(start: Optional[str], end: Optional[str], store_id: Optional[s
     
     total = order_q.count()
     
-    paid_status = [OrderStatus.PAID.value, OrderStatus.MAKING.value, OrderStatus.DONE.value]
+    paid_status = [OrderStatus.PAID.value, OrderStatus.MAKING.value, OrderStatus.DONE.value, OrderStatus.REVIEWED.value]
     paid_query = order_q.filter(Order.status.in_(paid_status))
     paid_count = paid_query.count()
     
@@ -1534,7 +1541,7 @@ def metrics_range(start: Optional[str], end: Optional[str], store_id: Optional[s
     
     pending_count = order_q.filter_by(status=OrderStatus.PAID.value).count()
     making = order_q.filter_by(status=OrderStatus.MAKING.value).count()
-    done = order_q.filter_by(status=OrderStatus.DONE.value).count()
+    done = order_q.filter(Order.status.in_([OrderStatus.DONE.value, OrderStatus.REVIEWED.value])).count()
     
     payments_wx_q = payment_q.filter_by(channel="WX_JSAPI").filter(
         Payment.created_at >= start_ts,
