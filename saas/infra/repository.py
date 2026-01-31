@@ -1482,7 +1482,7 @@ def metrics_today(store_id: Optional[str] = None) -> Dict[str, Any]:
     payments_wx = payment_q.filter_by(channel="WX_JSAPI").count()
     
     return {
-        "orders_total": total,
+        "orders_total": paid_count,
         "paid": pending_count, # 修正：paid 字段在前端用于显示待接单红点，应为 PAID 状态数量
         "revenue_cents": int(revenue_val),
         "making": making,
@@ -1557,7 +1557,7 @@ def metrics_range(start: Optional[str], end: Optional[str], store_id: Optional[s
     payments_wx = payments_wx_q.count()
     
     return {
-        "orders_total": total,
+        "orders_total": paid_count,
         "paid": pending_count,
         "revenue_cents": int(revenue_val),
         "making": making,
