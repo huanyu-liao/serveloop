@@ -519,6 +519,8 @@ def post_order_review_endpoint(order_id):
     if order.user_id != user_id:
         return jsonify({"error": "forbidden"}), 403
         
+    # Inject user_id for service layer
+    payload["user_id"] = user_id
     res = review_order(order_id, payload)
     if "error" in res:
         return jsonify(res), 400
