@@ -775,7 +775,11 @@ def list_orders(status: Optional[str]) -> List[Dict[str, Any]]:
     q = _apply_tenant_filter(q)
     
     if status:
-        q = q.filter(func.lower(Order.status) == func.lower(status))
+        if "," in status:
+            statuses = [s.strip().upper() for s in status.split(",")]
+            q = q.filter(Order.status.in_(statuses))
+        else:
+            q = q.filter(func.lower(Order.status) == func.lower(status))
     orders = q.order_by(Order.created_at.desc()).all()
     
     res = []
