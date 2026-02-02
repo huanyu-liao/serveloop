@@ -62,6 +62,43 @@ def list_my_stores():
     return jsonify(list_stores_by_merchant(mid))
 
 
+@merchant_bp.route('/merchant_console/upload', methods=['POST'])
+def upload_file_endpoint():
+    """
+    通用文件上传接口
+    POST Form-Data: file
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    if file:
+        # 尝试从 Header 获取商户ID，如果没有则用默认值
+        # 实际生产中应从 Token 解析
+        user_id = request.headers.get("X-Merchant-ID", "merchant_console")
+        
+        # 读取二进制数据
+        file_content = file.read()
+        
+        try:
+            res = upload_file_stream(
+                user_id=user_id, 
+                filename=file.filename, 
+                data=file_content, 
+                content_type=file.content_type
+            )
+            return jsonify(res)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
+            
+    return jsonify({"error": "Unknown error"}), 500
+
+
 @merchant_bp.route('/store_console/orders', methods=['GET'])
 def list_orders_endpoint():
     """
