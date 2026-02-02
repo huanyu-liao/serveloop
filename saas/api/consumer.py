@@ -252,7 +252,14 @@ def list_merchant_coupons_public(merchant_slug):
     """
     获取商户下所有优惠券（支持 activity_type 过滤）
     """
+    # 兼容从 query 或 body 传递的活动类型
     activity_type = request.args.get('type')
+    if not activity_type:
+        try:
+            payload = request.get_json(force=True) or {}
+            activity_type = payload.get('type')
+        except Exception:
+            activity_type = None
     
     # Resolve merchant
     m_info = get_merchant_by_slug(merchant_slug)
@@ -272,10 +279,20 @@ def list_merchant_coupons_public(merchant_slug):
     with set_temporary_tenant(tenant_id):
         # Pass None as store_id to get all stores' coupons
         cs = list_coupons(store_id=None, activity_type=activity_type)
+        # 门店信息字典，用于附加 name 和 address
+        try:
+            ss = list_stores_by_merchant(tenant_id)
+            store_map = {s["id"]: {"name": s.get("name", ""), "address": s.get("address", "")} for s in ss}
+        except Exception:
+            store_map = {}
         # Sign URLs
         for c in cs:
             if c.get("image_url"):
                 c["image_url"] = get_presigned_url(c["image_url"])
+            sid = c.get("store_id")
+            if sid and sid in store_map:
+                c["store_name"] = store_map[sid]["name"]
+                c["store_address"] = store_map[sid]["address"]
         return jsonify(cs)
 
 @consumer_bp.route('/member/assets', methods=['GET'])
