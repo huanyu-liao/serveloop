@@ -246,6 +246,38 @@ def get_merchant_decoration(merchant_slug):
         "banner_url": banner_url,
         "theme_style": m_info.get("theme_style") or "light"
     })
+
+@consumer_bp.get('/merchants/<merchant_slug>/coupons')
+def list_merchant_coupons_public(merchant_slug):
+    """
+    获取商户下所有优惠券（支持 activity_type 过滤）
+    """
+    activity_type = request.args.get('type')
+    
+    # Resolve merchant
+    m_info = get_merchant_by_slug(merchant_slug)
+    tenant_id = None
+    if m_info:
+        tenant_id = m_info["id"]
+    else:
+        # Fallback query
+        from ..infra.models import Merchant
+        m = Merchant.query.get(merchant_slug)
+        if m:
+            tenant_id = m.id
+    
+    if not tenant_id:
+        return jsonify({"error": "merchant_not_found"}), 404
+
+    with set_temporary_tenant(tenant_id):
+        # Pass None as store_id to get all stores' coupons
+        cs = list_coupons(store_id=None, activity_type=activity_type)
+        # Sign URLs
+        for c in cs:
+            if c.get("image_url"):
+                c["image_url"] = get_presigned_url(c["image_url"])
+        return jsonify(cs)
+
 @consumer_bp.route('/member/assets', methods=['GET'])
 def get_member_assets():
     """

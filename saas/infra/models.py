@@ -215,6 +215,7 @@ class Coupon(db.Model, TenantMixin):
     store_id = Column(String(32), nullable=True, index=True)
     rule = Column(JSON, default=dict)
     status = Column(String(16), default="ON")
+    activity_type = Column(String(32), default="SPECIAL_PRICE") # SPECIAL_PRICE / FREE_MEAL
     image_url = Column(String(512), default="")
 
 class MerchantUser(db.Model, TenantMixin):

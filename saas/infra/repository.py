@@ -1064,18 +1064,28 @@ def _ensure_coupon_columns():
         
         ensure("store_id", "ALTER TABLE coupons ADD COLUMN store_id VARCHAR(32)")
         ensure("image_url", "ALTER TABLE coupons ADD COLUMN image_url VARCHAR(512) DEFAULT ''")
+        ensure("activity_type", "ALTER TABLE coupons ADD COLUMN activity_type VARCHAR(32) DEFAULT 'SPECIAL_PRICE'")
         db.session.commit()
     except Exception:
         db.session.rollback()
 
-def list_coupons(store_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_coupons(store_id: Optional[str] = None, activity_type: Optional[str] = None) -> List[Dict[str, Any]]:
     _ensure_coupon_columns()
     q = Coupon.query
     q = _apply_tenant_filter(q)
     if store_id:
         q = q.filter_by(store_id=store_id)
+    if activity_type:
+        q = q.filter_by(activity_type=activity_type)
     cs = q.order_by(Coupon.id.asc()).all()
-    return [{"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url} for c in cs]
+    return [{
+        "id": c.id, 
+        "store_id": c.store_id, 
+        "rule": c.rule, 
+        "status": c.status, 
+        "activity_type": getattr(c, "activity_type", "SPECIAL_PRICE"),
+        "image_url": c.image_url
+    } for c in cs]
 
 def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_coupon_columns()
@@ -1090,11 +1100,19 @@ def create_coupon(payload: Dict[str, Any]) -> Dict[str, Any]:
         store_id=str(payload.get("store_id") or ""),
         rule=payload.get("rule") or {},
         status=str(payload.get("status", "ON")),
+        activity_type=str(payload.get("activity_type", "SPECIAL_PRICE")),
         image_url=str(payload.get("image_url") or "")
     )
     db.session.add(c)
     db.session.commit()
-    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url}
+    return {
+        "id": c.id, 
+        "store_id": c.store_id, 
+        "rule": c.rule, 
+        "status": c.status, 
+        "activity_type": c.activity_type,
+        "image_url": c.image_url
+    }
 
 def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     _ensure_coupon_columns()
@@ -1109,10 +1127,19 @@ def update_coupon(coupon_id: str, payload: Dict[str, Any]) -> Optional[Dict[str,
         c.rule = payload["rule"]
     if "status" in payload:
         c.status = str(payload["status"])
+    if "activity_type" in payload:
+        c.activity_type = str(payload["activity_type"])
     if "image_url" in payload:
         c.image_url = str(payload.get("image_url") or "")
     db.session.commit()
-    return {"id": c.id, "store_id": c.store_id, "rule": c.rule, "status": c.status, "image_url": c.image_url}
+    return {
+        "id": c.id, 
+        "store_id": c.store_id, 
+        "rule": c.rule, 
+        "status": c.status, 
+        "activity_type": c.activity_type,
+        "image_url": c.image_url
+    }
 
 def delete_coupon(coupon_id: str) -> bool:
     _ensure_coupon_columns()
